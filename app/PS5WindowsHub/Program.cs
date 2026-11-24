@@ -14,7 +14,9 @@ internal static class Program
             {
                 using var form = new MainForm();
                 form.CreateControl();
-                return File.Exists(Path.Combine(AppContext.BaseDirectory, "relinker.exe")) ? 0 : 3;
+                var baseDirectory = AppContext.BaseDirectory;
+                return File.Exists(Path.Combine(baseDirectory, "relinker.exe")) &&
+                    File.Exists(Path.Combine(baseDirectory, "PS5WindowsHub.Updater.exe")) ? 0 : 3;
             }
             catch
             {
