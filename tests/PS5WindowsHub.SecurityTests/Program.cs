@@ -22,7 +22,7 @@ byte[] BuildManifest(string version = "1.1.0", string url = "https://github.com/
 }
 
 string Sign(byte[] bytes, ECDsa? key = null) =>
-    Convert.ToBase64String((key ?? trustedKey).SignData(bytes, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+    Convert.ToBase64String((key ?? trustedKey).SignData(bytes, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
 
 string testRoot = Path.Combine(Path.GetTempPath(), "PS5WindowsHub-SecurityTests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(testRoot);
@@ -62,7 +62,7 @@ void ExpectArchiveRejected(string testName, params (string Name, int Attributes,
     });
 }
 
-Check("valid P-256 signature accepted", () =>
+Check("valid OpenSSL-compatible P-256 DER signature accepted", () =>
 {
     var bytes = BuildManifest();
     var result = SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0");
