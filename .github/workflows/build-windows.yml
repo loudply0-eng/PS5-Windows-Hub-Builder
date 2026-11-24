@@ -137,7 +137,7 @@ jobs:
           Write-Host 'Updater transaction tests passed: successful swap and failed-update rollback.'
 
       - name: Prepare binaries, corresponding source and checksums
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
           set -euo pipefail
           test -f build-relinker/core/relinker/relinker.exe
@@ -159,7 +159,7 @@ jobs:
             > dist/BUILD-INFO.txt
 
       - name: Create versioned update payload ZIP
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -178,7 +178,7 @@ jobs:
           } finally { $archive.Dispose() }
 
       - name: Generate and verify SHA-256 checksums
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
           set -euo pipefail
           version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
