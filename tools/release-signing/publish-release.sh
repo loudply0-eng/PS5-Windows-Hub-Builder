@@ -56,6 +56,11 @@ if [[ -z "$EMBEDDED_KEY" || "$EMBEDDED_KEY" != "$SUPPLIED_KEY" ]]; then
   echo "The public key used to sign this release does not match the key embedded in the target application source." >&2
   exit 1
 fi
+APP_SOURCE="$(gh api "repos/$REPOSITORY/contents/app/PS5WindowsHub/MainForm.cs?ref=$TARGET_COMMIT" --jq '.content' | base64 -d)"
+if ! grep -Eq 'EnableSecureUpdates[[:space:]]*=[[:space:]]*true' <<<"$APP_SOURCE"; then
+  echo "Refusing to publish: automatic updates are not explicitly enabled in the target application source." >&2
+  exit 1
+fi
 if gh api "repos/$REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
   echo "Git tag $TAG already exists. Refusing to publish against an unverified tag." >&2
   exit 1
