@@ -23,11 +23,28 @@ internal static class VerifiedUpdateDownloader
         Timeout = TimeSpan.FromMinutes(10)
     };
 
-    internal static async Task<string> DownloadAsync(
+    internal static Task<string> DownloadAsync(
         SignedUpdateManifest.Manifest manifest,
         IProgress<long>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PS5WindowsHub", "Updates", "Staging");
+        return DownloadAsync(manifest, Client, root, progress, cancellationToken);
+    }
+
+    internal static async Task<string> DownloadAsync(
+        SignedUpdateManifest.Manifest manifest,
+        HttpClient client,
+        string stagingRoot,
+        IProgress<long>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(client);
+        if (string.IsNullOrWhiteSpace(stagingRoot))
+            throw new ArgumentException("A staging directory is required.", nameof(stagingRoot));
+
         var expectedPath = $"/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v{manifest.Version}/{manifest.AssetName}";
         if (!Uri.TryCreate(manifest.AssetUrl, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
@@ -39,8 +56,7 @@ internal static class VerifiedUpdateDownloader
             !string.IsNullOrEmpty(uri.Fragment))
             throw new InvalidOperationException("The signed update URL is not the exact approved GitHub release asset URL.");
 
-        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PS5WindowsHub", "Updates", "Staging");
+        var root = Path.GetFullPath(stagingRoot);
         Directory.CreateDirectory(root);
         var staging = Path.Combine(root, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -48,7 +64,7 @@ internal static class VerifiedUpdateDownloader
 
         try
         {
-            using var response = await SendWithApprovedRedirectsAsync(uri, cancellationToken);
+            using var response = await SendWithApprovedRedirectsAsync(uri, client, cancellationToken);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength is long declared && declared != manifest.SizeBytes)
                 throw new InvalidDataException("The downloaded asset length does not match the signed manifest.");
@@ -88,7 +104,7 @@ internal static class VerifiedUpdateDownloader
         }
     }
 
-    private static async Task<HttpResponseMessage> SendWithApprovedRedirectsAsync(Uri initialUri, CancellationToken cancellationToken)
+    private static async Task<HttpResponseMessage> SendWithApprovedRedirectsAsync(Uri initialUri, HttpClient client, CancellationToken cancellationToken)
     {
         var current = initialUri;
         for (var hop = 0; hop <= MaximumRedirects; hop++)
@@ -97,7 +113,7 @@ internal static class VerifiedUpdateDownloader
                 !string.IsNullOrEmpty(current.UserInfo) || !ApprovedDownloadHosts.Contains(current.Host))
                 throw new InvalidDataException("The update download attempted to use an unapproved redirect destination.");
 
-            var response = await Client.GetAsync(current, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var response = await client.GetAsync(current, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!IsRedirect(response.StatusCode))
                 return response;
 
