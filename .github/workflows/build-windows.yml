@@ -110,11 +110,16 @@ jobs:
 
           $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
 
+          $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
+          [void]$mutex.WaitOne()
           $psi = [System.Diagnostics.ProcessStartInfo]::new()
           $psi.FileName = $helper
           $psi.UseShellExecute = $false
           foreach ($arg in @('--install-dir',$install,'--payload-dir',$payload,'--parent-pid',"$parentPid")) { $psi.ArgumentList.Add($arg) }
           $p = [System.Diagnostics.Process]::Start($psi)
+          Start-Sleep -Seconds 2
+          $mutex.ReleaseMutex()
+          $mutex.Dispose()
           $p.WaitForExit()
           if ($p.ExitCode -ne 0) { throw "Updater successful-install test failed with exit code $($p.ExitCode)." }
           if (-not (Test-Path (Join-Path $install 'PS5-Windows-Hub.exe'))) { throw 'Updated application executable is missing.' }
