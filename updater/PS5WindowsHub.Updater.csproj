@@ -7,4 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>PS5WindowsHub.Updater</AssemblyName>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(UpdaterTestMode)' == 'true'">
+    <DefineConstants>$(DefineConstants);UPDATER_TEST_MODE</DefineConstants>
+  </PropertyGroup>
 </Project>
