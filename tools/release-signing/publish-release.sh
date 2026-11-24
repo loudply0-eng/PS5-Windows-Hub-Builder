@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 7 ]]; then
-  echo "Usage: $0 <version> <target-commit> <dist-dir> <manifest.json> <manifest.sig.base64> <release-notes.txt> <repository>" >&2
+if [[ $# -ne 8 ]]; then
+  echo "Usage: $0 <version> <target-commit> <dist-dir> <manifest.json> <manifest.sig.base64> <public-key.pem> <release-notes.txt> <repository>" >&2
   exit 2
 fi
 
@@ -11,8 +11,9 @@ TARGET_COMMIT="$2"
 DIST_DIR="$(cd "$3" && pwd)"
 MANIFEST="$(cd "$(dirname "$4")" && pwd)/$(basename "$4")"
 SIGNATURE="$(cd "$(dirname "$5")" && pwd)/$(basename "$5")"
-NOTES="$(cd "$(dirname "$6")" && pwd)/$(basename "$6")"
-REPOSITORY="$7"
+PUBLIC_KEY="$(cd "$(dirname "$6")" && pwd)/$(basename "$6")"
+NOTES="$(cd "$(dirname "$7")" && pwd)/$(basename "$7")"
+REPOSITORY="$8"
 TAG="v$VERSION"
 ASSET="$DIST_DIR/PS5-Windows-Hub-$VERSION.zip"
 SOURCE="$DIST_DIR/AnyPS5-v0.1.5-source.zip"
@@ -22,16 +23,26 @@ if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; th
   echo "Invalid stable release version: $VERSION" >&2
   exit 1
 fi
-for file in "$ASSET" "$SOURCE" "$LICENSE" "$MANIFEST" "$SIGNATURE" "$NOTES"; do
+for file in "$ASSET" "$SOURCE" "$LICENSE" "$MANIFEST" "$SIGNATURE" "$PUBLIC_KEY" "$NOTES"; do
   [[ -f "$file" ]] || { echo "Required release file is missing: $file" >&2; exit 1; }
 done
 command -v gh >/dev/null 2>&1 || { echo "GitHub CLI is required." >&2; exit 1; }
 command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is required." >&2; exit 1; }
+command -v openssl >/dev/null 2>&1 || { echo "OpenSSL is required." >&2; exit 1; }
 (
   cd "$DIST_DIR"
   sha256sum --check SHA256SUMS.txt
 )
 gh auth status --hostname github.com >/dev/null
+signature_der="$(mktemp)"
+trap 'rm -f "$signature_der"' EXIT
+base64 -d "$SIGNATURE" > "$signature_der"
+openssl dgst -sha256 -verify "$PUBLIC_KEY" -signature "$signature_der" "$MANIFEST"
+if gh api "repos/$REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+  echo "Git tag $TAG already exists. Refusing to publish against an unverified tag." >&2
+  exit 1
+fi
+gh api "repos/$REPOSITORY/commits/$TARGET_COMMIT" >/dev/null
 if gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
   echo "Release $TAG already exists. Refusing to overwrite it." >&2
   exit 1
