@@ -6,8 +6,8 @@ namespace PS5WindowsHub;
 internal static class SafeUpdateArchiveExtractor
 {
     private const int MaximumEntries = 100_000;
-    private const long MaximumExpandedBytes = 8L * 1024 * 1024 * 1024;
-    private const long MaximumSingleFileBytes = 4L * 1024 * 1024 * 1024;
+    private const long MaximumExpandedBytes = 1L * 1024 * 1024 * 1024;
+    private const long MaximumSingleFileBytes = 512L * 1024 * 1024;
     private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL",
