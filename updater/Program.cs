@@ -8,7 +8,7 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        using var updateMutex = new Mutex(initiallyOwned: false, name: @"Local\\PS5WindowsHub.UpdateTransaction");
+        using var updateMutex = new Mutex(initiallyOwned: false, name: @"Local\PS5WindowsHub.UpdateTransaction");
         var ownsMutex = false;
         try
         {
