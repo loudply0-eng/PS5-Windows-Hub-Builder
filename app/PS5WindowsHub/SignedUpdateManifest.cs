@@ -127,13 +127,13 @@ internal static class SignedUpdateManifest
             throw new CryptographicException("Unexpected update asset name or version.");
         if (!Regex.IsMatch(manifest.Sha256, @"\A[0-9a-fA-F]{64}\z", RegexOptions.CultureInvariant))
             throw new CryptographicException("SHA-256 digest is invalid.");
+        var expectedAssetPath = $"/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v{manifest.Version}/{manifest.AssetName}";
         if (!Uri.TryCreate(manifest.AssetUrl, UriKind.Absolute, out var assetUri) ||
             assetUri.Scheme != Uri.UriSchemeHttps || assetUri.Port != 443 ||
             !string.Equals(assetUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
             !string.IsNullOrEmpty(assetUri.UserInfo) || !string.IsNullOrEmpty(assetUri.Fragment) ||
             !string.IsNullOrEmpty(assetUri.Query) ||
-            !assetUri.AbsolutePath.Contains($"/releases/download/v{manifest.Version}/", StringComparison.Ordinal) ||
-            !string.Equals(Uri.UnescapeDataString(Path.GetFileName(assetUri.AbsolutePath)), manifest.AssetName, StringComparison.Ordinal))
+            !string.Equals(assetUri.AbsolutePath, expectedAssetPath, StringComparison.Ordinal))
             throw new CryptographicException("Update asset URL is not the exact approved GitHub release asset.");
         if (manifest.ReleaseNotes.Length > 16 * 1024)
             throw new CryptographicException("Release notes are too large.");
