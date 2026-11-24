@@ -75,6 +75,12 @@ jobs:
           dotnet --info
           dotnet publish app/PS5WindowsHub/PS5WindowsHub.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:IncludeNativeLibrariesForSelfExtract=true -o app-publish
 
+      - name: Run updater security tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet run --project tests/PS5WindowsHub.SecurityTests/PS5WindowsHub.SecurityTests.csproj -c Release
+
       - name: Prepare binaries, corresponding source and checksums
         if: github.event_name == 'workflow_dispatch'
         run: |
