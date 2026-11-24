@@ -48,9 +48,10 @@ internal sealed class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 8, 0, 0), BackColor = BackColor };
         StyleButton(convert, "تحويل إلى Windows", Color.FromArgb(35, 105, 210), 190);
         convert.Click += async (_, _) => await ConvertAsync();
-        StyleButton(update, "التحديث الآمن — غير مفعّل", Color.FromArgb(54, 63, 78), 220);
+        var updatesReady = EnableSecureUpdates && !string.IsNullOrWhiteSpace(UpdateTrust.PublicKeyBase64);
+        StyleButton(update, updatesReady ? "التحقق من التحديثات" : "التحديث التلقائي — قيد التجهيز", Color.FromArgb(54, 63, 78), 220);
         update.Click += async (_, _) => await CheckForUpdatesAsync();
-        update.Enabled = EnableSecureUpdates && !string.IsNullOrWhiteSpace(UpdateTrust.PublicKeyBase64);
+        update.Enabled = updatesReady;
         actions.Controls.Add(convert);
         actions.Controls.Add(update);
         root.Controls.Add(actions, 0, 3);
