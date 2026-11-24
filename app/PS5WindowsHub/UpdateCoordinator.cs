@@ -62,6 +62,7 @@ internal static class UpdateCoordinator
             foreach (var requiredFile in new[]
             {
                 "PS5-Windows-Hub.exe",
+                "PS5-Windows-Hub.dll",
                 "PS5WindowsHub.Updater.exe",
                 "relinker.exe"
             })
@@ -69,6 +70,11 @@ internal static class UpdateCoordinator
                 if (!File.Exists(Path.Combine(payloadDirectory, requiredFile)))
                     throw new InvalidDataException("Verified update package is missing required file: " + requiredFile);
             }
+
+            var stagedAssembly = AssemblyName.GetAssemblyName(Path.Combine(payloadDirectory, "PS5-Windows-Hub.dll"));
+            var stagedVersion = stagedAssembly.Version?.ToString(3);
+            if (!string.Equals(stagedVersion, manifest.Version, StringComparison.Ordinal))
+                throw new CryptographicException("The application assembly version does not match the signed manifest version.");
 
             File.Delete(archivePath);
             status?.Report("Starting the verified updater and closing the application...");
