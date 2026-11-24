@@ -60,7 +60,7 @@ internal static class VerifiedUpdateDownloader
                 var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
                 if (read == 0) break;
                 total = checked(total + read);
-                if (total > manifest.SizeBytes || total > 4L * 1024 * 1024 * 1024)
+                if (total > manifest.SizeBytes || total > 1L * 1024 * 1024 * 1024)
                     throw new InvalidDataException("The downloaded asset exceeded its signed size limit.");
                 hash.AppendData(buffer, 0, read);
                 await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
