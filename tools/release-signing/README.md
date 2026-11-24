@@ -64,7 +64,7 @@ After creating and signing the manifest, a maintainer with GitHub CLI access can
 ```sh
 bash tools/release-signing/publish-release.sh \
   0.1.1 \
-  <target-commit-sha> \
+  "$(tr -d '\\r\\n' < ./PS5-Windows-Hub-Preview/BUILDER-COMMIT.txt)" \
   ./PS5-Windows-Hub-Preview \
   ./manifest.json \
   ./manifest.sig.base64 \
@@ -73,7 +73,7 @@ bash tools/release-signing/publish-release.sh \
   loudply0-eng/PS5-Windows-Hub-Builder
 ```
 
-The script verifies the packaged SHA-256 list and detached signature with the public key, checks the target commit, refuses to reuse an existing tag or release, and uploads only public assets. It never reads the private key.
+The script verifies the packaged SHA-256 list, checks that the target commit matches the commit recorded in the artifact, verifies the detached signature and P-256 curve, confirms the same public key is embedded in that commit's Windows app source, refuses to reuse an existing tag or release, and uploads only public assets. It never reads the private key.
 
 ## 5. Never publish private material
 
