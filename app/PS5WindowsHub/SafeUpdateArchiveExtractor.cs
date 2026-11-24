@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace PS5WindowsHub;
 
@@ -28,10 +29,15 @@ internal static class SafeUpdateArchiveExtractor
         return !ReservedDeviceNames.Contains(stem);
     }
 
-    internal static void Extract(string archivePath, string destinationDirectory)
+    internal static void Extract(string archivePath, string destinationDirectory) =>
+        Extract(archivePath, destinationDirectory, expectedSha256: null);
+
+    internal static void Extract(string archivePath, string destinationDirectory, string? expectedSha256)
     {
         if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
             throw new FileNotFoundException("Verified update archive was not found.", archivePath);
+        if ((File.GetAttributes(archivePath) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Update archive must not be a reparse point.");
         if (string.IsNullOrWhiteSpace(destinationDirectory))
             throw new ArgumentException("A staging destination is required.", nameof(destinationDirectory));
         if (Directory.Exists(destinationDirectory) && Directory.EnumerateFileSystemEntries(destinationDirectory).Any())
@@ -40,7 +46,7 @@ internal static class SafeUpdateArchiveExtractor
         Directory.CreateDirectory(destinationDirectory);
         try
         {
-            ExtractIntoEmptyDirectory(archivePath, destinationDirectory);
+            ExtractIntoEmptyDirectory(archivePath, destinationDirectory, expectedSha256);
         }
         catch
         {
@@ -49,13 +55,27 @@ internal static class SafeUpdateArchiveExtractor
         }
     }
 
-    private static void ExtractIntoEmptyDirectory(string archivePath, string destinationDirectory)
+    private static void ExtractIntoEmptyDirectory(string archivePath, string destinationDirectory, string? expectedSha256)
     {
         var root = Path.GetFullPath(destinationDirectory);
         var rootPrefix = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
 
         using var archiveStream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: false);
+        if (!string.IsNullOrEmpty(expectedSha256))
+        {
+            byte[] expected;
+            try { expected = Convert.FromHexString(expectedSha256); }
+            catch (FormatException ex) { throw new CryptographicException("Expected archive SHA-256 is invalid.", ex); }
+            if (expected.Length != 32)
+                throw new CryptographicException("Expected archive SHA-256 must contain exactly 32 bytes.");
+
+            var actual = SHA256.HashData(archiveStream);
+            if (!CryptographicOperations.FixedTimeEquals(actual, expected))
+                throw new CryptographicException("Update archive changed after download verification.");
+            archiveStream.Position = 0;
+        }
+
+        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: true);
         if (archive.Entries.Count is 0 or > MaximumEntries)
             throw new InvalidDataException("Archive entry count is outside the allowed range.");
 
