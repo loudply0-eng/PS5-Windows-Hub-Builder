@@ -159,7 +159,7 @@ Check("asset URL from another GitHub repository rejected", () =>
 
 Check("null manifest string field rejected", () =>
 {
-    var json = Encoding.UTF8.GetString(BuildManifest()).Replace("\\"release_notes\\":\\"Security test\\"", "\\"release_notes\\":null", StringComparison.Ordinal);
+    var json = Encoding.UTF8.GetString(BuildManifest()).Replace("\"minimum_supported_version\":\"1.0.0\"", "\"minimum_supported_version\":\"1.0.1\"", StringComparison.Ordinal);
     var bytes = Encoding.UTF8.GetBytes(json);
     try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
     catch (CryptographicException) { return; }
@@ -168,7 +168,7 @@ Check("null manifest string field rejected", () =>
 
 Check("minimum supported version above installed version rejected", () =>
 {
-    var json = Encoding.UTF8.GetString(BuildManifest()).Replace("\\"minimum_supported_version\\":\\"1.0.0\\"", "\\"minimum_supported_version\\":\\"1.0.1\\"", StringComparison.Ordinal);
+    var json = Encoding.UTF8.GetString(BuildManifest()).Replace("\"minimum_supported_version\":\"1.0.0\"", "\"minimum_supported_version\":\"1.0.1\"", StringComparison.Ordinal);
     var bytes = Encoding.UTF8.GetBytes(json);
     try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
     catch (CryptographicException) { return; }
