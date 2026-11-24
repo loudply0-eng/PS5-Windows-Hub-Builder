@@ -20,7 +20,19 @@ The private key is P-256, encrypted with a passphrase, and stays on the phone. C
 
 The generated `public-key-spki-base64.txt` is the public SubjectPublicKeyInfo value. It is safe to share and will be embedded in the Windows application after it is reviewed.
 
-## 2. Create and sign exact manifest bytes
+## 2. Embed only the public key
+
+After cloning the Builder repository on the phone, copy or point the script at the generated public-key file:
+
+```sh
+python tools/release-signing/embed-public-key.py \
+  --public-key-base64 "$HOME/.local/share/ps5-windows-hub-signing/public-key-spki-base64.txt"
+```
+
+The script validates that the key is ECDSA P-256 and updates only the empty public-key placeholder in `app/PS5WindowsHub/UpdateTrust.cs`. Review that one source change, commit it to the Builder branch, and rebuild. The private key is never opened by this script.
+
+
+## 3. Create and sign exact manifest bytes
 
 After the versioned ZIP has been built and copied to the phone, create the manifest locally. The asset URL is the planned GitHub Release URL and must match the exact release tag and ZIP filename; the ZIP does not need to be uploaded yet:
 
@@ -45,7 +57,7 @@ bash tools/release-signing/sign-manifest.sh \
 
 The output is a base64-encoded ECDSA P-256/SHA-256 DER signature. The verifier checks the signature against the exact downloaded manifest bytes.
 
-## 3. Publish only public release files
+## 4. Publish only public release files
 
 After creating and signing the manifest, a maintainer with GitHub CLI access can publish the versioned ZIP, manifest, signature, and matching upstream source and license together:
 
@@ -63,7 +75,7 @@ bash tools/release-signing/publish-release.sh \
 
 The script verifies the packaged SHA-256 list and detached signature with the public key, checks the target commit, refuses to reuse an existing tag or release, and uploads only public assets. It never reads the private key.
 
-## 4. Never publish private material
+## 5. Never publish private material
 
 Publish only:
 - `manifest.json`
