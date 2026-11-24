@@ -147,6 +147,7 @@ jobs:
           cp build-relinker/core/relinker/relinker.exe dist/PS5-Windows-Hub/relinker.exe
           cp upstream/LICENSE dist/LICENSE-AnyPS5.txt
           git -C upstream archive --format=zip --output=../dist/AnyPS5-v0.1.5-source.zip HEAD
+          git rev-parse HEAD > dist/BUILDER-COMMIT.txt
           printf '%s\n' \
             'PS5 Windows Hub - desktop shell and relinker preview' \
             'App: self-contained .NET 8 WinForms front end; standalone updater helper included; automatic updates are not enabled yet' \
@@ -183,7 +184,7 @@ jobs:
           set -euo pipefail
           version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
           test -n "$version"
-          (cd dist && sha256sum relinker.exe PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
+          (cd dist && sha256sum BUILDER-COMMIT.txt relinker.exe PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
           (cd dist && sha256sum --check SHA256SUMS.txt)
 
       - name: Upload Windows build artifact
