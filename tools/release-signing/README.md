@@ -31,8 +31,20 @@ python tools/release-signing/embed-public-key.py \
 
 The script validates that the key is ECDSA P-256 and updates only the empty public-key placeholder in `app/PS5WindowsHub/UpdateTrust.cs`. Review that one source change, commit it to the Builder branch, and rebuild. The private key is never opened by this script.
 
+## 3. Prepare the update-enabled release build
 
-## 3. Create and sign exact manifest bytes
+Do not enable the update button while the production key or signed release is missing. Only after the final security tests, a real signed-release smoke test, and rollback tests pass:
+
+1. Set `Version` in `app/PS5WindowsHub/PS5WindowsHub.csproj` to the new three-part release version. For the documented example, this is `0.1.1`; the current preview line is `0.1.0`.
+2. Change `EnableSecureUpdates` in `app/PS5WindowsHub/MainForm.cs` to `true`.
+3. Commit these changes together with the embedded public key.
+4. Run the Windows workflow manually for that exact commit and download its `PS5-Windows-Hub-Preview` artifact.
+
+The release publishing script refuses to publish unless the target commit contains the same embedded P-256 public key and explicitly enables the update button. Keep the UI disabled until those conditions and all end-to-end tests are satisfied.
+
+
+
+## 4. Create and sign exact manifest bytes
 
 After the versioned ZIP has been built and copied to the phone, create the manifest locally. The asset URL is the planned GitHub Release URL and must match the exact release tag and ZIP filename; the ZIP does not need to be uploaded yet:
 
@@ -57,7 +69,7 @@ bash tools/release-signing/sign-manifest.sh \
 
 The output is a base64-encoded ECDSA P-256/SHA-256 DER signature. The verifier checks the signature against the exact downloaded manifest bytes.
 
-## 4. Publish only public release files
+## 5. Publish only public release files
 
 After creating and signing the manifest, a maintainer with GitHub CLI access can publish the versioned ZIP, manifest, signature, and matching upstream source and license together:
 
@@ -75,7 +87,7 @@ bash tools/release-signing/publish-release.sh \
 
 The script verifies the packaged SHA-256 list, checks that the target commit matches the commit recorded in the artifact, verifies the detached signature and P-256 curve, confirms the same public key is embedded in that commit's Windows app source, refuses to reuse an existing tag or release, and uploads only public assets. It never reads the private key.
 
-## 5. Never publish private material
+## 6. Never publish private material
 
 Publish only:
 - `manifest.json`
