@@ -42,7 +42,32 @@ internal static class Program
             }
         }
 
-        Application.Run(new MainForm());
-        return 0;
+        using var updateMutex = new Mutex(
+            initiallyOwned: false,
+            name: @"Local\PS5WindowsHub.UpdateTransaction");
+        var ownsUpdateMutex = false;
+        try
+        {
+            try { ownsUpdateMutex = updateMutex.WaitOne(0); }
+            catch (AbandonedMutexException) { ownsUpdateMutex = true; }
+
+            if (!ownsUpdateMutex)
+            {
+                MessageBox.Show(
+                    "PS5 WINDOWS HUB is currently updating. Please try again in a moment.",
+                    "PS5 WINDOWS HUB",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return 6;
+            }
+
+            Application.Run(new MainForm());
+            return 0;
+        }
+        finally
+        {
+            if (ownsUpdateMutex)
+                updateMutex.ReleaseMutex();
+        }
     }
 }
