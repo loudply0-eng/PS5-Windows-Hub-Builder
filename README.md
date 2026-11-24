@@ -18,7 +18,7 @@ Only the GitHub account `loudply0-eng` can run the job. The workflow has read-on
 
 ## Important limitation
 
-The updater is **not enabled yet**. The manifest verifier, verified downloader, bounded ZIP extractor, external updater helper, rollback path, and offline signing scripts are partial foundations. There is no production signing key or embedded public key, no in-app manifest/signature retrieval flow, and no official signed release. The update button remains disabled until the complete flow and all tests pass.
+The updater is **not enabled yet**. The manifest verifier, verified downloader, bounded ZIP extractor, external updater helper, rollback path, and offline signing scripts are partial foundations. The in-app update coordinator and helper handoff are implemented but disabled. There is no production signing key or embedded public key and no official signed release. The update button remains disabled until the complete flow and all tests pass.
 
 AnyPS5 is a **relinker**, not a complete PS5 emulator or complete game runtime. A successful relink does not mean a PS5 game will run; required system PRX libraries and per-game compatibility are separate work.
 
