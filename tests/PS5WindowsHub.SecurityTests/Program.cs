@@ -17,7 +17,7 @@ var publicKey = Convert.ToBase64String(trustedKey.ExportSubjectPublicKeyInfo());
 
 byte[] BuildManifest(string version = "1.1.0", string url = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip", string extra = "", string assetName = "PS5-Windows-Hub-1.1.0.zip")
 {
-    var json = "{\"version\":\"" + version + "\",\"minimum_supported_version\":\"1.0.0\",\"asset_name\":\"PS5-Windows-Hub-1.1.0.zip\",\"asset_url\":\"" + url + "\",\"size_bytes\":1024,\"sha256\":\"" + new string('a', 64) + "\",\"release_notes\":\"Security test\"" + extra + "}";
+    var json = "{\"version\":\"" + version + "\",\"minimum_supported_version\":\"1.0.0\",\"asset_name\":\"" + assetName + "\",\"asset_url\":\"" + url + "\",\"size_bytes\":1024,\"sha256\":\"" + new string('a', 64) + "\",\"release_notes\":\"Security test\"" + extra + "}";
     return Encoding.UTF8.GetBytes(json);
 }
 
