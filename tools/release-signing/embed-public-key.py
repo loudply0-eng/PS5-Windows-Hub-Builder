@@ -24,11 +24,11 @@ def main() -> int:
         if len(der) < 80 or len(der) > 256:
             raise ValueError("P-256 SubjectPublicKeyInfo DER length is outside the expected range.")
 
-        with tempfile.NamedTemporaryFile(prefix="ps5-hub-public-key-", suffix=".der") as temp:
-            temp.write(der)
-            temp.flush()
+        with tempfile.TemporaryDirectory(prefix="ps5-hub-public-key-") as temporary:
+            der_path = Path(temporary) / "public-key.der"
+            der_path.write_bytes(der)
             result = subprocess.run(
-                ["openssl", "pkey", "-pubin", "-inform", "DER", "-in", temp.name, "-text", "-noout"],
+                ["openssl", "pkey", "-pubin", "-inform", "DER", "-in", str(der_path), "-text", "-noout"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
