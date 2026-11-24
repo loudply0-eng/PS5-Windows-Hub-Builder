@@ -91,6 +91,16 @@ def main() -> int:
         if len(signature_der) < 8 or len(signature_der) > 80:
             raise ValueError("ECDSA DER signature size is invalid.")
 
+        key_info = subprocess.run(
+            ["openssl", "pkey", "-pubin", "-in", str(args.public_key), "-text", "-noout"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=True,
+        ).stdout
+        if "Public-Key: (256 bit)" not in key_info or "ASN1 OID: prime256v1" not in key_info:
+            raise ValueError("The update verification key must be ECDSA P-256.")
+
         with tempfile.NamedTemporaryFile(prefix="ps5-hub-signature-", suffix=".der") as temp:
             temp.write(signature_der)
             temp.flush()
