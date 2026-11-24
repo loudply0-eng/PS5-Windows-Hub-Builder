@@ -88,8 +88,11 @@ internal static class SafeUpdateArchiveExtractor
 
             var unixType = (entry.ExternalAttributes >> 16) & 0xF000;
             if ((entry.ExternalAttributes & (int)FileAttributes.ReparsePoint) != 0 ||
-                (unixType != 0 && unixType != 0x8000 && unixType != 0x4000))
-                throw new InvalidDataException("Archive contains a link or unsupported special file.");
+                (unixType != 0 && unixType != 0x8000 && unixType != 0x4000) ||
+                (unixType == 0x4000 && !isDirectory) ||
+                (unixType == 0x8000 && isDirectory) ||
+                (isDirectory && entry.Length != 0))
+                throw new InvalidDataException("Archive contains a link, special file, or inconsistent directory entry.");
 
             for (var i = 1; i < segments.Length; i++)
                 directoryNames.Add(string.Join("/", segments.Take(i)));
