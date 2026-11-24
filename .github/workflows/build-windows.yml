@@ -92,6 +92,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           dotnet run --project tests/PS5WindowsHub.SecurityTests/PS5WindowsHub.SecurityTests.csproj -c Release
 
+      - name: Test offline release signing tools
+        run: |
+          set -euo pipefail
+          python tests/release-signing-tools/test_release_signing.py
+
       - name: Publish standalone updater helper
         shell: pwsh
         run: |
