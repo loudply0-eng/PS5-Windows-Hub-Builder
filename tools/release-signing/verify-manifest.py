@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 
 MAX_ASSET_BYTES = 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 64 * 1024
@@ -65,7 +65,7 @@ def main() -> int:
         expected_path = f"/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v{document['version']}/{expected_name}"
         if (parsed.scheme != "https" or parsed.hostname != "github.com" or parsed.port not in (None, 443)
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
-                or unquote(parsed.path) != expected_path):
+                or parsed.path != expected_path):
             raise ValueError("Manifest asset URL is not the exact versioned GitHub release URL.")
 
         size = args.asset.stat().st_size
