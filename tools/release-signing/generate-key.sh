@@ -19,7 +19,7 @@ fi
 
 mkdir -p "$KEY_DIR"
 chmod 700 "$KEY_DIR"
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1 -pkeyopt ec_param_enc:named_curve -out "$PRIVATE_KEY"
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1 -pkeyopt ec_param_enc:named_curve -aes-256-cbc -out "$PRIVATE_KEY"
 openssl pkey -in "$PRIVATE_KEY" -pubout -out "$PUBLIC_KEY"
 openssl pkey -pubin -in "$PUBLIC_KEY" -outform DER | base64 | tr -d '\r\n' > "$PUBLIC_KEY_BASE64"
 chmod 600 "$PRIVATE_KEY" "$PUBLIC_KEY" "$PUBLIC_KEY_BASE64"
