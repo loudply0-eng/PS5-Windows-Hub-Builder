@@ -63,6 +63,17 @@ jobs:
           set -euo pipefail
           cmake --build build-relinker --parallel 2
 
+      - name: Verify standalone x64 relinker
+        run: |
+          set -euo pipefail
+          binary="build-relinker/core/relinker/relinker.exe"
+          test -f "$binary"
+          objdump -f "$binary" | grep -qi 'architecture: i386:x86-64'
+          if objdump -p "$binary" | grep -Eiq 'DLL Name: (libstdc\+\+-6|libgcc_s_seh-1|libwinpthread-1|libatomic-1|libgomp-1)\.dll'; then
+            echo "The relinker still depends on a MinGW runtime DLL."
+            exit 1
+          fi
+
       - name: Run relinker tests
         run: |
           set -euo pipefail
