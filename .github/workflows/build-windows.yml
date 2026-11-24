@@ -206,7 +206,7 @@ jobs:
           set -euo pipefail
           version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
           test -n "$version"
-          (cd dist && sha256sum BUILDER-COMMIT.txt relinker.exe PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
+          (cd dist && sha256sum BUILDER-COMMIT.txt BUILD-INFO.txt LICENSE-AnyPS5.txt relinker.exe PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
           (cd dist && sha256sum --check SHA256SUMS.txt)
 
       - name: Upload Windows build artifact
