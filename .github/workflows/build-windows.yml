@@ -188,7 +188,7 @@ jobs:
           (cd dist && sha256sum --check SHA256SUMS.txt)
 
       - name: Upload Windows build artifact
-        if: github.event_name == 'workflow_dispatch'
+        if: github.actor == 'loudply0-eng'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: PS5-Windows-Hub-Preview
