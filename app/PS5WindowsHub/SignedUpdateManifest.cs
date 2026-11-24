@@ -32,11 +32,16 @@ internal static class SignedUpdateManifest
         [JsonPropertyName("release_notes")] public string ReleaseNotes { get; init; } = "";
     }
 
-    private static bool IsStableVersion(string value, out Version version)
+    private static bool IsStableVersion(string? value, out Version version)
     {
         version = new Version(0, 0, 0);
-        return Regex.IsMatch(value, @"\A(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant) &&
-            Version.TryParse(value, out version);
+        if (string.IsNullOrEmpty(value) ||
+            !Regex.IsMatch(value, @"\A(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant))
+            return false;
+        if (!Version.TryParse(value, out var parsed) || parsed is null)
+            return false;
+        version = parsed;
+        return true;
     }
 
     internal static Manifest Verify(byte[] manifestBytes, string signatureBase64, string publicKeyBase64, string installedVersion)
