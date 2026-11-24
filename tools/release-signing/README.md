@@ -22,7 +22,7 @@ The generated `public-key-spki-base64.txt` is the public SubjectPublicKeyInfo va
 
 ## 2. Create and sign exact manifest bytes
 
-After the versioned ZIP is uploaded to the matching GitHub Release, create the manifest locally on the phone. The asset URL must match the exact release tag and ZIP filename:
+After the versioned ZIP has been built and copied to the phone, create the manifest locally. The asset URL is the planned GitHub Release URL and must match the exact release tag and ZIP filename; the ZIP does not need to be uploaded yet:
 
 ```sh
 python tools/release-signing/create-manifest.py \
@@ -47,7 +47,7 @@ The output is a base64-encoded ECDSA P-256/SHA-256 DER signature. The verifier c
 
 ## 3. Publish only public release files
 
-After reviewing the generated manifest and signature, a maintainer with GitHub CLI access can publish the versioned ZIP together with the matching upstream source and license:
+After creating and signing the manifest, a maintainer with GitHub CLI access can publish the versioned ZIP, manifest, signature, and matching upstream source and license together:
 
 ```sh
 bash tools/release-signing/publish-release.sh \
