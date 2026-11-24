@@ -20,7 +20,20 @@ ASSET_URL = (
 def run(args, *, expect_success=True):
     converted = []
     bash_command = str(args[0]).lower() in ("bash", "bash.exe")
-    for arg in args:
+    if bash_command:
+        # Python is a native Windows process in this job. Resolving "bash"
+        # through Windows PATH can select the WSL shim in System32 instead
+        # of the MSYS2 shell that is running this test.
+        bash_path = subprocess.run(
+            ["cygpath", "-w", "/usr/bin/bash"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=True,
+        )
+        converted.append(bash_path.stdout.strip())
+
+    for arg in (args[1:] if bash_command else args):
         if isinstance(arg, Path) and bash_command:
             path_result = subprocess.run(
                 ["cygpath", "-u", str(arg)],
