@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
+from p256_spki import validate_p256_spki
+
 MAX_ASSET_BYTES = 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 64 * 1024
 MAX_SIGNATURE_BYTES = 256
@@ -91,15 +93,19 @@ def main() -> int:
         if len(signature_der) < 8 or len(signature_der) > 80:
             raise ValueError("ECDSA DER signature size is invalid.")
 
-        key_info = subprocess.run(
-            ["openssl", "pkey", "-pubin", "-in", str(args.public_key), "-text", "-noout"],
+        public_der = subprocess.run(
+            ["openssl", "pkey", "-pubin", "-in", str(args.public_key), "-outform", "DER"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
+            stderr=subprocess.PIPE,
             check=True,
         ).stdout
-        if "Public-Key: (256 bit)" not in key_info or "ASN1 OID: prime256v1" not in key_info:
-            raise ValueError("The update verification key must be ECDSA P-256.")
+        validate_p256_spki(public_der)
+        subprocess.run(
+            ["openssl", "pkey", "-pubin", "-in", str(args.public_key), "-pubcheck", "-noout"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
 
         with tempfile.TemporaryDirectory(prefix="ps5-hub-signature-") as temporary:
             signature_path = Path(temporary) / "manifest.sig.der"

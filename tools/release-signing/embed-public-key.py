@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from p256_spki import validate_p256_spki
+
 PLACEHOLDER = 'internal const string PublicKeyBase64 = "";'
 
 
@@ -21,21 +23,18 @@ def main() -> int:
         if not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", encoded):
             raise ValueError("Public key file is not canonical base64.")
         der = base64.b64decode(encoded, validate=True)
-        if len(der) < 80 or len(der) > 256:
-            raise ValueError("P-256 SubjectPublicKeyInfo DER length is outside the expected range.")
+        validate_p256_spki(der)
 
         with tempfile.TemporaryDirectory(prefix="ps5-hub-public-key-") as temporary:
             der_path = Path(temporary) / "public-key.der"
             der_path.write_bytes(der)
-            result = subprocess.run(
-                ["openssl", "pkey", "-pubin", "-inform", "DER", "-in", str(der_path), "-text", "-noout"],
+            subprocess.run(
+                ["openssl", "pkey", "-pubin", "-inform", "DER", "-in", str(der_path), "-pubcheck", "-noout"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 check=True,
             )
-        if "ASN1 OID: prime256v1" not in result.stdout or "Public-Key: (256 bit)" not in result.stdout:
-            raise ValueError("The supplied public key is not an ECDSA P-256 key.")
 
         source = args.source.read_text(encoding="utf-8")
         occurrences = source.count(PLACEHOLDER)

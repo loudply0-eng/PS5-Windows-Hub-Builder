@@ -183,6 +183,22 @@ def main():
             [sys.executable, TOOLS / "verify-manifest.py", manifest, asset, wrong_curve_public, signature],
             expect_success=False,
         )
+        wrong_curve_der = subprocess.run(
+            ["openssl", "pkey", "-pubin", "-in", str(wrong_curve_public), "-outform", "DER"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        ).stdout
+        wrong_curve_b64 = work / "wrong-curve-spki-base64.txt"
+        wrong_curve_b64.write_text(base64.b64encode(wrong_curve_der).decode("ascii"), encoding="ascii")
+        run(
+            [
+                sys.executable, TOOLS / "embed-public-key.py",
+                "--public-key-base64", wrong_curve_b64,
+                "--source", trust_source,
+            ],
+            expect_success=False,
+        )
 
     print("Offline release signing tool tests: PASS")
     return 0
