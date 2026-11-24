@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Windows.Forms;
 
 internal static class Program
 {
@@ -25,6 +26,18 @@ internal static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine("Updater failed: " + ex);
+            if (!IsTestMode())
+            {
+                try
+                {
+                    MessageBox.Show(
+                        "The update could not be completed. The previous version has been restored when possible.\n\n" + ex.Message,
+                        "PS5 WINDOWS HUB — Update",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+                catch { /* UI recovery is best-effort. */ }
+            }
             return 1;
         }
         finally
@@ -92,6 +105,9 @@ internal static class Program
                 try { Directory.Delete(oldBackup, recursive: true); }
                 catch { /* Keep the new update successful; an older backup may be removed manually. */ }
             }
+
+            if (!IsTestMode())
+                StartApplication(installDirectory);
         }
         catch
         {
@@ -106,6 +122,12 @@ internal static class Program
             {
                 throw new IOException("Update failed and automatic rollback also failed. Backup: " + backupDirectory, rollbackError);
             }
+
+            if (!IsTestMode() && File.Exists(Path.Combine(installDirectory, ApplicationFileName)))
+            {
+                try { StartApplication(installDirectory); }
+                catch { /* Recovery launch is best-effort; the installation files have already been restored. */ }
+            }
             throw;
         }
         finally
@@ -113,6 +135,20 @@ internal static class Program
             try { if (Directory.Exists(replacementDirectory)) Directory.Delete(replacementDirectory, recursive: true); }
             catch { /* best-effort cleanup */ }
         }
+    }
+
+    private static bool IsTestMode() =>
+        string.Equals(Environment.GetEnvironmentVariable("PS5_WINDOWS_HUB_UPDATER_TEST"), "1", StringComparison.Ordinal);
+
+    private static void StartApplication(string installDirectory)
+    {
+        var applicationPath = Path.Combine(installDirectory, ApplicationFileName);
+        _ = Process.Start(new ProcessStartInfo
+        {
+            FileName = applicationPath,
+            WorkingDirectory = installDirectory,
+            UseShellExecute = false
+        }) ?? throw new InvalidOperationException("The application could not be restarted after the update.");
     }
 
     private static void WaitForParentExit(int processId, string expectedApplicationPath)
