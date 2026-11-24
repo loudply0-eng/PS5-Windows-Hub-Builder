@@ -8,8 +8,15 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        using var updateMutex = new Mutex(initiallyOwned: false, name: @"Local\\PS5WindowsHub.UpdateTransaction");
+        var ownsMutex = false;
         try
         {
+            try { ownsMutex = updateMutex.WaitOne(0); }
+            catch (AbandonedMutexException) { ownsMutex = true; }
+            if (!ownsMutex)
+                throw new InvalidOperationException("Another update transaction is already running.");
+
             var options = Parse(args);
             Apply(options.InstallDirectory, options.PayloadDirectory, options.ParentProcessId);
             Console.WriteLine("Update installed and health check passed.");
@@ -19,6 +26,10 @@ internal static class Program
         {
             Console.Error.WriteLine("Updater failed: " + ex);
             return 1;
+        }
+        finally
+        {
+            if (ownsMutex) updateMutex.ReleaseMutex();
         }
     }
 
@@ -49,7 +60,7 @@ internal static class Program
         if (string.Equals(Path.TrimEndingDirectorySeparator(installDirectory), Path.TrimEndingDirectorySeparator(installRoot ?? ""), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Refusing to replace a filesystem root.");
 
-        WaitForParentExit(parentPid);
+        WaitForParentExit(parentPid, Path.Combine(installDirectory, ApplicationFileName));
 
         var parentDirectory = Path.GetDirectoryName(installDirectory)
             ?? throw new InvalidDataException("Invalid application installation path.");
@@ -97,11 +108,15 @@ internal static class Program
         }
     }
 
-    private static void WaitForParentExit(int processId)
+    private static void WaitForParentExit(int processId, string expectedApplicationPath)
     {
         try
         {
             using var parent = Process.GetProcessById(processId);
+            var actualPath = parent.MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(actualPath) ||
+                !string.Equals(Path.GetFullPath(actualPath), Path.GetFullPath(expectedApplicationPath), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The supplied parent process is not the installed PS5 Windows Hub application.");
             if (!parent.WaitForExit(90_000))
                 throw new TimeoutException("The application did not close before the updater timeout.");
         }
