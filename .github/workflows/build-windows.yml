@@ -172,7 +172,7 @@ jobs:
           $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $asset))
           try {
             $names = @($archive.Entries | ForEach-Object { $_.FullName })
-            foreach ($required in @('PS5-Windows-Hub.exe','PS5WindowsHub.Updater.exe','relinker.exe')) {
+            foreach ($required in @('PS5-Windows-Hub.exe','PS5-Windows-Hub.dll','PS5WindowsHub.Updater.exe','relinker.exe')) {
               if ($names -notcontains $required) { throw "Update ZIP is missing required root entry: $required" }
             }
           } finally { $archive.Dispose() }
