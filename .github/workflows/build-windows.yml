@@ -167,13 +167,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           [xml]$project = Get-Content 'app/PS5WindowsHub/PS5WindowsHub.csproj'
           $version = $project.Project.PropertyGroup.Version
-          if ($version -notmatch '^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: PS5-Windows-Hub-Preview
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14
-) { throw "Unexpected app version: $version" }
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw "Unexpected app version: $version" }
           $asset = "dist/PS5-Windows-Hub-$version.zip"
           Compress-Archive -Path 'dist/PS5-Windows-Hub/*' -DestinationPath $asset -CompressionLevel Optimal -Force
           $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $asset))
@@ -188,7 +182,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
-          version="$(sed -n 's:.*<Version>\\([^<]*\\)</Version>.*:\\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
+          version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
           test -n "$version"
           (cd dist && sha256sum relinker.exe PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
           (cd dist && sha256sum --check SHA256SUMS.txt)
