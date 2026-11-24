@@ -13,7 +13,7 @@ The app expects `relinker.exe` and the standalone `PS5WindowsHub.Updater.exe` be
 
 ## Secure updates
 
-The update control is intentionally disabled. Partial foundations exist for signed-manifest verification, HTTPS asset download, bounded ZIP extraction, and a separate transactional updater with backup and rollback. The app does not yet retrieve or verify a production release manifest, has no embedded production public key, and does not run an end-to-end update flow. Do not enable or advertise automatic updates until all required tests pass.
+The update control is intentionally disabled. Partial foundations exist for signed-manifest verification, HTTPS asset download, bounded ZIP extraction, and a separate transactional updater with backup and rollback. The update coordinator is wired to retrieve and verify release metadata, stage the package, and launch the separate updater helper. It cannot run yet because no production public key is embedded and no signed release exists. Do not enable or advertise automatic updates until all required tests pass.
 
 ## Engine limitations
 
