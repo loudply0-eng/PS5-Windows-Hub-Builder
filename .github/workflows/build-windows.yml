@@ -25,6 +25,9 @@ jobs:
       - name: Checkout builder workflow
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          # Build the exact source commit that will be named in the artifact and release.
+          # The default pull_request checkout is a synthetic merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Install pinned MSYS2 toolchain environment
@@ -191,7 +194,14 @@ jobs:
           cp build-relinker/core/relinker/relinker.exe dist/PS5-Windows-Hub/relinker.exe
           cp upstream/LICENSE dist/LICENSE-AnyPS5.txt
           git -C upstream archive --format=zip --output=../dist/AnyPS5-v0.1.5-source.zip HEAD
-          git rev-parse HEAD > dist/BUILDER-COMMIT.txt
+          actual_commit="$(git rev-parse HEAD)"
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            expected_commit="$(jq -r '.pull_request.head.sha' "$GITHUB_EVENT_PATH")"
+          else
+            expected_commit="$GITHUB_SHA"
+          fi
+          test "$actual_commit" = "$expected_commit"
+          printf '%s\n' "$actual_commit" > dist/BUILDER-COMMIT.txt
           printf '%s\n' \
             'PS5 Windows Hub - desktop shell and relinker preview' \
             'App: self-contained .NET 8 WinForms front end; standalone updater helper included; automatic updates are not enabled yet' \
