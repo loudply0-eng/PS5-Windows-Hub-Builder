@@ -69,7 +69,7 @@ def main() -> int:
             raise ValueError("Manifest asset URL is not the exact versioned GitHub release URL.")
 
         size = args.asset.stat().st_size
-        if not isinstance(document["size_bytes"], int) or document["size_bytes"] != size or size <= 0 or size > MAX_ASSET_BYTES:
+        if type(document["size_bytes"]) is not int or document["size_bytes"] != size or size <= 0 or size > MAX_ASSET_BYTES:
             raise ValueError("Manifest asset size does not match the ZIP or exceeds 1 GiB.")
 
         if not isinstance(document["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", document["sha256"]):
