@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -141,7 +142,7 @@ internal static class SignedUpdateManifest
             !string.IsNullOrEmpty(assetUri.Query) ||
             !string.Equals(assetUri.AbsolutePath, expectedAssetPath, StringComparison.Ordinal))
             throw new CryptographicException("Update asset URL is not the exact approved GitHub release asset.");
-        if (manifest.ReleaseNotes.Length > 16 * 1024)
+        if (Encoding.UTF8.GetByteCount(manifest.ReleaseNotes) > 16 * 1024)
             throw new CryptographicException("Release notes are too large.");
 
         return manifest;
