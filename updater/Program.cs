@@ -73,8 +73,6 @@ internal static class Program
         if (string.Equals(Path.TrimEndingDirectorySeparator(installDirectory), Path.TrimEndingDirectorySeparator(installRoot ?? ""), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Refusing to replace a filesystem root.");
 
-        WaitForParentExit(parentPid, Path.Combine(installDirectory, ApplicationFileName));
-
         var parentDirectory = Path.GetDirectoryName(installDirectory)
             ?? throw new InvalidDataException("Invalid application installation path.");
         var token = Guid.NewGuid().ToString("N");
@@ -84,6 +82,7 @@ internal static class Program
 
         try
         {
+            WaitForParentExit(parentPid, Path.Combine(installDirectory, ApplicationFileName));
             var copied = CopyTree(payloadDirectory, replacementDirectory);
             if (copied.Files == 0 ||
                 !File.Exists(Path.Combine(replacementDirectory, ApplicationFileName)) ||
