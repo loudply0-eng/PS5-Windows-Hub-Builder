@@ -91,6 +91,7 @@ jobs:
       - name: Run updater transaction integration tests
         shell: pwsh
         run: |
+          $env:PS5_WINDOWS_HUB_UPDATER_TEST = '1'
           $ErrorActionPreference = 'Stop'
           $install = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Install-Test'
           $stageRoot = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/Updates/Staging'
