@@ -19,6 +19,7 @@ TAG="v$VERSION"
 ASSET="$DIST_DIR/PS5-Windows-Hub-$VERSION.zip"
 SOURCE="$DIST_DIR/AnyPS5-v0.1.5-source.zip"
 LICENSE="$DIST_DIR/LICENSE-AnyPS5.txt"
+BUILDER_COMMIT_FILE="$DIST_DIR/BUILDER-COMMIT.txt"
 
 if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   echo "Invalid stable release version: $VERSION" >&2
@@ -28,7 +29,7 @@ if [[ ! "$TARGET_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "Target must be a full 40-character commit SHA." >&2
   exit 1
 fi
-for file in "$ASSET" "$SOURCE" "$LICENSE" "$MANIFEST" "$SIGNATURE" "$PUBLIC_KEY" "$NOTES"; do
+for file in "$ASSET" "$SOURCE" "$LICENSE" "$BUILDER_COMMIT_FILE" "$MANIFEST" "$SIGNATURE" "$PUBLIC_KEY" "$NOTES"; do
   [[ -f "$file" ]] || { echo "Required release file is missing: $file" >&2; exit 1; }
 done
 command -v gh >/dev/null 2>&1 || { echo "GitHub CLI is required." >&2; exit 1; }
@@ -39,6 +40,11 @@ command -v openssl >/dev/null 2>&1 || { echo "OpenSSL is required." >&2; exit 1;
   cd "$DIST_DIR"
   sha256sum --check SHA256SUMS.txt
 )
+BUILT_COMMIT="$(tr -d '\r\n' < "$BUILDER_COMMIT_FILE")"
+if [[ "${BUILT_COMMIT,,}" != "${TARGET_COMMIT,,}" ]]; then
+  echo "The build artifact commit does not match the requested release target." >&2
+  exit 1
+fi
 gh auth status --hostname github.com >/dev/null
 python3 "$SCRIPT_DIR/verify-manifest.py" "$MANIFEST" "$ASSET" "$PUBLIC_KEY" "$SIGNATURE"
 if gh api "repos/$REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
