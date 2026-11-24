@@ -109,7 +109,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UpdaterTestMode=true -p:BaseIntermediateOutputPath=obj/updater-test/ -p:BaseOutputPath=bin/updater-test/ -o updater-test-publish
+          $testObj = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Updater-Test-Obj'
+          $testBin = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Updater-Test-Bin'
+          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UpdaterTestMode=true "-p:BaseIntermediateOutputPath=$testObj/" "-p:BaseOutputPath=$testBin/" -o updater-test-publish
 
       - name: Run updater transaction integration tests
         shell: pwsh
