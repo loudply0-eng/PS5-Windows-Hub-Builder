@@ -343,9 +343,33 @@ Check("safe ZIP extraction succeeds", () =>
     BuildZip(zipPath, ("bin/PS5-Windows-Hub.exe", 0, "verified-app"));
     try
     {
-        SafeUpdateArchiveExtractor.Extract(zipPath, destination);
+        var expectedZipHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zipPath)));
+        SafeUpdateArchiveExtractor.Extract(zipPath, destination, expectedZipHash);
         var extracted = File.ReadAllText(Path.Combine(destination, "bin", "PS5-Windows-Hub.exe"));
         if (extracted != "verified-app") throw new Exception("Extracted file content differs.");
+    }
+    finally
+    {
+        if (File.Exists(zipPath)) File.Delete(zipPath);
+        if (Directory.Exists(destination)) Directory.Delete(destination, recursive: true);
+    }
+});
+
+Check("ZIP extraction rejects an archive whose signed digest changed", () =>
+{
+    var zipPath = Path.Combine(testRoot, Guid.NewGuid().ToString("N") + ".zip");
+    var destination = Path.Combine(testRoot, Guid.NewGuid().ToString("N"));
+    BuildZip(zipPath, ("file.txt", 0, "original"));
+    try
+    {
+        try
+        {
+            SafeUpdateArchiveExtractor.Extract(zipPath, destination, new string('0', 64));
+            throw new Exception("An archive with the wrong SHA-256 was extracted.");
+        }
+        catch (CryptographicException) { }
+        if (Directory.Exists(destination) && Directory.EnumerateFileSystemEntries(destination).Any())
+            throw new Exception("Failed digest verification left extracted files behind.");
     }
     finally
     {
