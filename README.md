@@ -1,25 +1,35 @@
 # PS5 Windows Hub — Builder
 
-Public build-workflow repository for PS5 Windows Hub.
+Public, owner-triggered Windows CI for PS5 Windows Hub.
 
-## Purpose
+## Current workflow
 
-This repository will contain reproducible Windows build workflows and release automation. It must not contain private source, credentials, signing keys, game files, firmware, or proprietary assets.
+`.github/workflows/build-windows.yml` builds the upstream AnyPS5 **rel linker-only** target for Windows from the fixed upstream release v0.1.5.
 
-## Source and licensing
+- Trigger: manual `workflow_dispatch`
+- Runner: GitHub-hosted Windows runner
+- Toolchain: MSYS2 UCRT64 / MinGW-w64
+- Upstream source: public AnyPS5 tag v0.1.5, pinned to commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`
+- Tests: CTest
+- Output: relinker executable, corresponding upstream source archive, license and SHA-256 checksums
+- Artifact retention: 14 days
 
-The upstream engine is https://github.com/boykopovar/AnyPS5 and is licensed GPL-2.0-only. If a distributed build includes or is derived from that engine, publish and provide the corresponding source and notices as required by GPL-2.0. A public builder repository does not make private GPL-covered source exempt from those obligations.
+Only the GitHub account `loudply0-eng` can start this workflow in this repository. It has read-only repository permissions and uses no secrets or private-repository token.
 
-## Security model
+## Important limitation
 
-- Workflows should run only on trusted manual dispatches or reviewed changes.
-- Never execute untrusted pull-request code with secrets.
-- Use a narrowly scoped, read-only token only if a private source checkout is genuinely required.
-- Prefer public, license-compliant source inputs for reproducible public builds.
-- Pin third-party actions to reviewed commit SHAs.
-- Verify downloaded artifacts with SHA-256 and publish checksums.
-- Do not store signing credentials in workflow files or repository contents.
+This is an initial toolchain and relinker test build. It is **not** the complete AnyPS5 Windows runtime and does not mean PS5 games are broadly playable. The full Windows system-library build and per-game compatibility testing are separate milestones.
 
-## Current status
+## Upstream and license
 
-Scaffolding only. No build workflow or private-repository access token has been configured yet.
+- https://github.com/boykopovar/AnyPS5
+- Upstream license: GPL-2.0-only
+
+Every distributed build derived from AnyPS5 must meet the GPL-2.0-only source and notice requirements. The workflow includes the matching upstream source archive and license with the build artifact.
+
+## Security
+
+- No private Core checkout.
+- No secrets, signing keys, game files, firmware or console keys.
+- Third-party actions are pinned to full commit SHAs.
+- Do not add pull-request workflows that execute untrusted code with secrets.
