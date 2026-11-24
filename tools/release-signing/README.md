@@ -20,9 +20,21 @@ The private key is P-256, encrypted with a passphrase, and stays on the phone. C
 
 The generated `public-key-spki-base64.txt` is the public SubjectPublicKeyInfo value. It is safe to share and will be embedded in the Windows application after it is reviewed.
 
-## 2. Sign exact manifest bytes
+## 2. Create and sign exact manifest bytes
 
-After a release manifest has been finalized, sign it without editing or reformatting it afterward:
+After the versioned ZIP is uploaded to the matching GitHub Release, create the manifest locally on the phone. The asset URL must match the exact release tag and ZIP filename:
+
+```sh
+python tools/release-signing/create-manifest.py \
+  --version 0.1.1 \
+  --minimum-supported-version 0.1.0 \
+  --asset PS5-Windows-Hub-0.1.1.zip \
+  --asset-url https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v0.1.1/PS5-Windows-Hub-0.1.1.zip \
+  --release-notes release-notes.txt \
+  --output manifest.json
+```
+
+Then sign the exact file without editing or reformatting it afterward:
 
 ```sh
 bash tools/release-signing/sign-manifest.sh \
