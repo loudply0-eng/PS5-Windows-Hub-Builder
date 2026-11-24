@@ -11,27 +11,47 @@ internal static class Program
     {
         using var updateMutex = new Mutex(initiallyOwned: false, name: @"Local\PS5WindowsHub.UpdateTransaction");
         var ownsMutex = false;
+        var transactionStarted = false;
+        (string InstallDirectory, string PayloadDirectory, int ParentProcessId)? options = null;
+        Exception? updateError = null;
+
         try
         {
+            options = Parse(args);
             try { ownsMutex = updateMutex.WaitOne(90_000); }
             catch (AbandonedMutexException) { ownsMutex = true; }
             if (!ownsMutex)
                 throw new TimeoutException("Another application or update transaction held the update mutex past the timeout.");
 
-            var options = Parse(args);
-            Apply(options.InstallDirectory, options.PayloadDirectory, options.ParentProcessId);
-            Console.WriteLine("Update installed and health check passed.");
-            return 0;
+            transactionStarted = true;
+            Apply(options.Value.InstallDirectory, options.Value.PayloadDirectory, options.Value.ParentProcessId);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine("Updater failed: " + ex);
+            updateError = ex;
+        }
+        finally
+        {
+            if (ownsMutex)
+                updateMutex.ReleaseMutex();
+        }
+
+        // Restart only after releasing the mutex so the new app can acquire it.
+        if (transactionStarted && options is not null && !IsTestMode())
+        {
+            try { StartApplication(options.Value.InstallDirectory); }
+            catch (Exception restartError) { updateError ??= restartError; }
+        }
+
+        if (updateError is not null)
+        {
+            Console.Error.WriteLine("Updater failed: " + updateError);
             if (!IsTestMode())
             {
                 try
                 {
                     MessageBox.Show(
-                        "The update could not be completed. The previous version has been restored when possible.\n\n" + ex.Message,
+                        "The update could not be completed. The previous version has been restored when possible.\n\n" + updateError.Message,
                         "PS5 WINDOWS HUB — Update",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
@@ -40,10 +60,9 @@ internal static class Program
             }
             return 1;
         }
-        finally
-        {
-            if (ownsMutex) updateMutex.ReleaseMutex();
-        }
+
+        Console.WriteLine("Update installed and health check passed.");
+        return 0;
     }
 
     private static (string InstallDirectory, string PayloadDirectory, int ParentProcessId) Parse(string[] args)
@@ -105,8 +124,6 @@ internal static class Program
                 catch { /* Keep the new update successful; an older backup may be removed manually. */ }
             }
 
-            if (!IsTestMode())
-                StartApplication(installDirectory);
         }
         catch
         {
@@ -122,11 +139,6 @@ internal static class Program
                 throw new IOException("Update failed and automatic rollback also failed. Backup: " + backupDirectory, rollbackError);
             }
 
-            if (!IsTestMode() && File.Exists(Path.Combine(installDirectory, ApplicationFileName)))
-            {
-                try { StartApplication(installDirectory); }
-                catch { /* Recovery launch is best-effort; the installation files have already been restored. */ }
-            }
             throw;
         }
         finally
