@@ -4,7 +4,7 @@ Public, owner-triggered Windows CI for PS5 Windows Hub.
 
 ## Current workflow
 
-`.github/workflows/build-windows.yml` builds the upstream AnyPS5 **rel linker-only** target for Windows from the fixed upstream release v0.1.5.
+`.github/workflows/build-windows.yml` builds the upstream AnyPS5 **relinker-only** target for Windows from the fixed upstream release v0.1.5.
 
 - Trigger: manual `workflow_dispatch`
 - Runner: GitHub-hosted Windows runner
