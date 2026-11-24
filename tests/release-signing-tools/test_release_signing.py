@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -18,8 +17,21 @@ ASSET_URL = (
 
 
 def run(args, *, expect_success=True):
+    converted = []
+    for arg in args:
+        if isinstance(arg, Path):
+            path_result = subprocess.run(
+                ["cygpath", "-u", str(arg)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=True,
+            )
+            converted.append(path_result.stdout.strip())
+        else:
+            converted.append(str(arg))
     result = subprocess.run(
-        [str(arg) for arg in args],
+        converted,
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
