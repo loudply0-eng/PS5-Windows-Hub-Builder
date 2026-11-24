@@ -88,6 +88,56 @@ jobs:
           dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o updater-publish
           Copy-Item updater-publish/PS5WindowsHub.Updater.exe app-publish/PS5WindowsHub.Updater.exe
 
+      - name: Run updater transaction integration tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $install = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Install-Test'
+          $stageRoot = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/Updates/Staging'
+          $payload = Join-Path $stageRoot 'ci-integration-payload'
+          $badPayload = Join-Path $stageRoot 'ci-rollback-payload'
+          $helperDir = Join-Path $stageRoot 'ci-helper'
+          $backupPattern = '.PS5WindowsHub-backup-*'
+          Remove-Item $install,$payload,$badPayload,$helperDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $install,$payload,$badPayload,$helperDir | Out-Null
+
+          Copy-Item -Path 'app-publish/*' -Destination $install -Recurse -Force
+          Copy-Item -Path 'app-publish/*' -Destination $payload -Recurse -Force
+          Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $install 'relinker.exe')
+          Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $payload 'relinker.exe')
+          $helper = Join-Path $helperDir 'PS5WindowsHub.Updater.exe'
+          Copy-Item 'app-publish/PS5WindowsHub.Updater.exe' $helper
+
+          $dummy = [System.Diagnostics.Process]::Start($env:ComSpec, '/c exit 0')
+          $dummy.WaitForExit()
+          $parentPid = $dummy.Id
+
+          $psi = [System.Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = $helper
+          $psi.UseShellExecute = $false
+          foreach ($arg in @('--install-dir',$install,'--payload-dir',$payload,'--parent-pid',"$parentPid")) { $psi.ArgumentList.Add($arg) }
+          $p = [System.Diagnostics.Process]::Start($psi)
+          $p.WaitForExit()
+          if ($p.ExitCode -ne 0) { throw "Updater successful-install test failed with exit code $($p.ExitCode)." }
+          if (-not (Test-Path (Join-Path $install 'PS5-Windows-Hub.exe'))) { throw 'Updated application executable is missing.' }
+          if (-not (Get-ChildItem $env:RUNNER_TEMP -Directory -Filter $backupPattern)) { throw 'Previous-version backup was not retained.' }
+
+          Copy-Item -Path 'app-publish/*' -Destination $badPayload -Recurse -Force
+          Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $badPayload 'relinker.exe')
+          Set-Content -Path (Join-Path $badPayload 'PS5-Windows-Hub.exe') -Value 'not-a-valid-windows-executable'
+          $beforeRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
+
+          $psi2 = [System.Diagnostics.ProcessStartInfo]::new()
+          $psi2.FileName = $helper
+          $psi2.UseShellExecute = $false
+          foreach ($arg in @('--install-dir',$install,'--payload-dir',$badPayload,'--parent-pid',"$parentPid")) { $psi2.ArgumentList.Add($arg) }
+          $p2 = [System.Diagnostics.Process]::Start($psi2)
+          $p2.WaitForExit()
+          if ($p2.ExitCode -eq 0) { throw 'Updater accepted a corrupt application during rollback test.' }
+          $afterRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
+          if ($beforeRollback -ne $afterRollback) { throw 'Failed update did not restore the prior application.' }
+          Write-Host 'Updater transaction tests passed: successful swap and failed-update rollback.'
+
       - name: Prepare binaries, corresponding source and checksums
         if: github.event_name == 'workflow_dispatch'
         run: |
