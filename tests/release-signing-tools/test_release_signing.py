@@ -19,8 +19,9 @@ ASSET_URL = (
 
 def run(args, *, expect_success=True):
     converted = []
+    bash_command = str(args[0]).lower() in ("bash", "bash.exe")
     for arg in args:
-        if isinstance(arg, Path):
+        if isinstance(arg, Path) and bash_command:
             path_result = subprocess.run(
                 ["cygpath", "-u", str(arg)],
                 stdout=subprocess.PIPE,
