@@ -44,4 +44,6 @@ Status: design only. This document does not claim that automatic updates are imp
 
 ## Current implementation status
 
-The current WinForms preview has a disabled update button. The updater, signature verification, staging installer, rollback, and release manifest are not implemented. Do not enable the button or advertise automatic updates until all required tests pass.
+The WinForms preview still has a disabled update button. The repository now contains a partial signed-manifest verifier (P-256 key enforcement, exact-byte signature verification, strict JSON property checks, version downgrade checks) and a downloader that validates every HTTPS redirect against an explicit GitHub asset-host allow-list and checks exact length and SHA-256. A Windows CI security-test harness covers valid signatures, tampering, wrong keys, duplicate/unknown fields, downgrade, unapproved hosts, and oversized manifests.
+
+Still not implemented: signed manifest/release publication, offline key provisioning procedure, archive extraction and archive-entry validation, Authenticode publisher verification, separate updater helper, transactional installation, health checks, rollback, persistent user-data migration, and end-to-end Windows install/update tests. The current downloader only stages a verified ZIP; it does not install or execute it. Do not enable the button or advertise automatic updates until all remaining components and required tests pass.
