@@ -111,6 +111,18 @@ def main():
         assert document["size_bytes"] == asset.stat().st_size
         assert len(document["sha256"]) == 64
 
+        encoded_url_manifest = work / "encoded-url-manifest.json"
+        encoded_url = ASSET_URL.replace("/releases/download/", "/releases%2Fdownload/")
+        run([
+            sys.executable, TOOLS / "create-manifest.py",
+            "--version", VERSION,
+            "--minimum-supported-version", "1.0.0",
+            "--asset", asset,
+            "--asset-url", encoded_url,
+            "--release-notes", notes,
+            "--output", encoded_url_manifest,
+        ], expect_success=False)
+
         run(["bash", TOOLS / "sign-manifest.sh", private_key, manifest, signature])
         run([sys.executable, TOOLS / "verify-manifest.py", manifest, asset, public_key, signature])
 
