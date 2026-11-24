@@ -141,6 +141,41 @@ Check("unapproved asset host rejected", () =>
     throw new Exception("Unapproved host was accepted.");
 });
 
+Check("query string on asset URL rejected", () =>
+{
+    var bytes = BuildManifest(url: "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip?download=1");
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("Asset URL query string was accepted.");
+});
+
+Check("asset URL from another GitHub repository rejected", () =>
+{
+    var bytes = BuildManifest(url: "https://github.com/attacker/other/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip");
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("Foreign GitHub repository URL was accepted.");
+});
+
+Check("null manifest string field rejected", () =>
+{
+    var json = Encoding.UTF8.GetString(BuildManifest()).Replace("\\"release_notes\\":\\"Security test\\"", "\\"release_notes\\":null", StringComparison.Ordinal);
+    var bytes = Encoding.UTF8.GetBytes(json);
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("Null release notes were accepted.");
+});
+
+Check("minimum supported version above installed version rejected", () =>
+{
+    var json = Encoding.UTF8.GetString(BuildManifest()).Replace("\\"minimum_supported_version\\":\\"1.0.0\\"", "\\"minimum_supported_version\\":\\"1.0.1\\"", StringComparison.Ordinal);
+    var bytes = Encoding.UTF8.GetBytes(json);
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("An unsupported installation was accepted.");
+});
+
+
 Check("asset URL must use the exact Builder repository", () =>
 {
     var bytes = BuildManifest(url: "https://github.com/attacker/other/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip");
