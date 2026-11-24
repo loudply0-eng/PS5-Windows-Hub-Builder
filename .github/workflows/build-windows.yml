@@ -104,10 +104,15 @@ jobs:
           dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o updater-publish
           Copy-Item updater-publish/PS5WindowsHub.Updater.exe app-publish/PS5WindowsHub.Updater.exe
 
+      - name: Publish test-only updater helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UpdaterTestMode=true -o updater-test-publish
+
       - name: Run updater transaction integration tests
         shell: pwsh
         run: |
-          $env:PS5_WINDOWS_HUB_UPDATER_TEST = '1'
           $ErrorActionPreference = 'Stop'
           $install = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Install-Test'
           $stageRoot = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/Updates/Staging'
@@ -123,7 +128,7 @@ jobs:
           Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $install 'relinker.exe')
           Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $payload 'relinker.exe')
           $helper = Join-Path $helperDir 'PS5WindowsHub.Updater.exe'
-          Copy-Item 'app-publish/PS5WindowsHub.Updater.exe' $helper
+          Copy-Item 'updater-test-publish/PS5WindowsHub.Updater.exe' $helper
 
           $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
 
