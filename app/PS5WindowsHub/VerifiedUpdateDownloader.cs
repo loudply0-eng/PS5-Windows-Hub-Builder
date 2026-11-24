@@ -28,12 +28,16 @@ internal static class VerifiedUpdateDownloader
         IProgress<long>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        var expectedPath = $"/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v{manifest.Version}/{manifest.AssetName}";
         if (!Uri.TryCreate(manifest.AssetUrl, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
             uri.Port != 443 ||
             !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
-            !string.IsNullOrEmpty(uri.UserInfo))
-            throw new InvalidOperationException("The signed update URL is not an approved GitHub HTTPS URL.");
+            !string.Equals(uri.AbsolutePath, expectedPath, StringComparison.Ordinal) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
+            throw new InvalidOperationException("The signed update URL is not the exact approved GitHub release asset URL.");
 
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "PS5WindowsHub", "Updates", "Staging");
