@@ -5,7 +5,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 
 MAX_ASSET_BYTES = 1024 * 1024 * 1024
 MAX_RELEASE_NOTES_BYTES = 16 * 1024
@@ -39,10 +39,10 @@ def main() -> int:
             raise ValueError(f"Asset must be an existing file named exactly {expected_name}.")
 
         parsed = urlparse(args.asset_url)
-        expected_path = f"/releases/download/v{args.version}/{expected_name}"
+        expected_path = f"/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v{args.version}/{expected_name}"
         if (parsed.scheme != "https" or parsed.hostname != "github.com" or parsed.port not in (None, 443)
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
-                or unquote(parsed.path) != f"/loudply0-eng/PS5-Windows-Hub-Builder{expected_path}"):
+                or parsed.path != expected_path):
             raise ValueError("Asset URL must be the exact HTTPS GitHub release URL for this version.")
 
         size = args.asset.stat().st_size
