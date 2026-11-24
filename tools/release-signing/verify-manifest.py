@@ -101,12 +101,12 @@ def main() -> int:
         if "Public-Key: (256 bit)" not in key_info or "ASN1 OID: prime256v1" not in key_info:
             raise ValueError("The update verification key must be ECDSA P-256.")
 
-        with tempfile.NamedTemporaryFile(prefix="ps5-hub-signature-", suffix=".der") as temp:
-            temp.write(signature_der)
-            temp.flush()
+        with tempfile.TemporaryDirectory(prefix="ps5-hub-signature-") as temporary:
+            signature_path = Path(temporary) / "manifest.sig.der"
+            signature_path.write_bytes(signature_der)
             subprocess.run(
                 ["openssl", "dgst", "-sha256", "-verify", str(args.public_key),
-                 "-signature", temp.name, str(args.manifest)],
+                 "-signature", str(signature_path), str(args.manifest)],
                 check=True
             )
 
