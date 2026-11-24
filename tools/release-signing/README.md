@@ -56,11 +56,12 @@ bash tools/release-signing/publish-release.sh \
   ./PS5-Windows-Hub-Preview \
   ./manifest.json \
   ./manifest.sig.base64 \
+  "$HOME/.local/share/ps5-windows-hub-signing/update-signing-public.pem" \
   ./release-notes.txt \
   loudply0-eng/PS5-Windows-Hub-Builder
 ```
 
-The script verifies the packaged SHA-256 list, refuses to overwrite an existing release, and uploads only public assets. It never reads the private key.
+The script verifies the packaged SHA-256 list and detached signature with the public key, checks the target commit, refuses to reuse an existing tag or release, and uploads only public assets. It never reads the private key.
 
 ## 4. Never publish private material
 
