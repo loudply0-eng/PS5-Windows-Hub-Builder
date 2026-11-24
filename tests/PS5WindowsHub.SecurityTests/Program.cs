@@ -11,6 +11,12 @@ void Check(string name, Action test)
     catch (Exception ex) { failed++; Console.Error.WriteLine("FAIL " + name + ": " + ex.Message); }
 }
 
+async Task CheckAsync(string name, Func<Task> test)
+{
+    try { await test(); passed++; Console.WriteLine("PASS " + name); }
+    catch (Exception ex) { failed++; Console.Error.WriteLine("FAIL " + name + ": " + ex.Message); }
+}
+
 using var trustedKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 using var wrongKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 var publicKey = Convert.ToBase64String(trustedKey.ExportSubjectPublicKeyInfo());
@@ -231,6 +237,104 @@ Check("release metadata endpoints are pinned", () =>
 
 
 
+var updateBytes = Encoding.UTF8.GetBytes("verified update payload bytes");
+var updateHash = Convert.ToHexString(SHA256.HashData(updateBytes)).ToLowerInvariant();
+var downloadManifest = new SignedUpdateManifest.Manifest
+{
+    Version = "1.1.0",
+    MinimumSupportedVersion = "1.0.0",
+    AssetName = "PS5-Windows-Hub-1.1.0.zip",
+    AssetUrl = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip",
+    SizeBytes = updateBytes.Length,
+    Sha256 = updateHash,
+    ReleaseNotes = "Downloader test"
+};
+
+await CheckAsync("verified downloader follows approved redirect and verifies bytes", async () =>
+{
+    var staging = Path.Combine(testRoot, "download-valid");
+    using var handler = new SequenceHandler((_, index) =>
+    {
+        if (index == 0)
+            return new HttpResponseMessage(HttpStatusCode.Redirect)
+            {
+                Headers = { Location = new Uri("https://release-assets.githubusercontent.com/assets/update.zip?token=test") }
+            };
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(updateBytes) };
+    });
+    using var client = new HttpClient(handler);
+    var downloaded = await VerifiedUpdateDownloader.DownloadAsync(downloadManifest, client, staging);
+    if (!File.ReadAllBytes(downloaded).SequenceEqual(updateBytes))
+        throw new Exception("Downloaded bytes differ from the signed payload.");
+    if (handler.RequestCount != 2)
+        throw new Exception("Expected exactly one approved redirect.");
+});
+
+await CheckAsync("verified downloader rejects a wrong hash and clears staging", async () =>
+{
+    var staging = Path.Combine(testRoot, "download-bad-hash");
+    var badManifest = downloadManifest with { Sha256 = new string('0', 64) };
+    using var handler = new SequenceHandler((_, _) =>
+        new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(updateBytes) });
+    using var client = new HttpClient(handler);
+    try
+    {
+        await VerifiedUpdateDownloader.DownloadAsync(badManifest, client, staging);
+        throw new Exception("A package with the wrong hash was accepted.");
+    }
+    catch (InvalidDataException) { }
+    if (Directory.Exists(staging) && Directory.EnumerateFileSystemEntries(staging).Any())
+        throw new Exception("Failed download left staged files behind.");
+});
+
+await CheckAsync("verified downloader rejects unapproved redirect host", async () =>
+{
+    var staging = Path.Combine(testRoot, "download-bad-redirect");
+    using var handler = new SequenceHandler((_, _) =>
+        new HttpResponseMessage(HttpStatusCode.Redirect)
+        {
+            Headers = { Location = new Uri("https://evil.example/update.zip") }
+        });
+    using var client = new HttpClient(handler);
+    try
+    {
+        await VerifiedUpdateDownloader.DownloadAsync(downloadManifest, client, staging);
+        throw new Exception("An unapproved redirect host was accepted.");
+    }
+    catch (InvalidDataException) { }
+    if (Directory.Exists(staging) && Directory.EnumerateFileSystemEntries(staging).Any())
+        throw new Exception("Rejected redirect left staged files behind.");
+});
+
+await CheckAsync("interrupted download leaves installed version untouched", async () =>
+{
+    var staging = Path.Combine(testRoot, "download-interrupted");
+    var install = Path.Combine(testRoot, "installed-sentinel");
+    Directory.CreateDirectory(install);
+    var installedFile = Path.Combine(install, "PS5-Windows-Hub.exe");
+    File.WriteAllText(installedFile, "currently installed version");
+    var before = SHA256.HashData(File.ReadAllBytes(installedFile));
+
+    using var handler = new SequenceHandler((_, _) =>
+    {
+        var content = new StreamContent(new FailingReadStream(updateBytes));
+        content.Headers.ContentLength = updateBytes.Length;
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+    });
+    using var client = new HttpClient(handler);
+    try
+    {
+        await VerifiedUpdateDownloader.DownloadAsync(downloadManifest, client, staging);
+        throw new Exception("Interrupted download unexpectedly succeeded.");
+    }
+    catch (IOException) { }
+    var after = SHA256.HashData(File.ReadAllBytes(installedFile));
+    if (!CryptographicOperations.FixedTimeEquals(before, after))
+        throw new Exception("Installed application changed during interrupted download.");
+    if (Directory.Exists(staging) && Directory.EnumerateFileSystemEntries(staging).Any())
+        throw new Exception("Interrupted download left staging files behind.");
+});
+
 Check("safe ZIP extraction succeeds", () =>
 {
     var zipPath = Path.Combine(testRoot, Guid.NewGuid().ToString("N") + ".zip");
@@ -266,3 +370,55 @@ ExpectArchiveRejected("ZIP trailing-dot filename rejected", ("badname.", 0, "x")
 Console.WriteLine($"Security tests: {passed} passed, {failed} failed.");
 try { Directory.Delete(testRoot, recursive: true); } catch { }
 return failed == 0 ? 0 : 1;
+
+
+sealed class SequenceHandler : HttpMessageHandler
+{
+    private readonly Func<HttpRequestMessage, int, HttpResponseMessage> _factory;
+    private int _requestCount;
+
+    internal SequenceHandler(Func<HttpRequestMessage, int, HttpResponseMessage> factory) => _factory = factory;
+    internal int RequestCount => _requestCount;
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var index = Interlocked.Increment(ref _requestCount) - 1;
+        return Task.FromResult(_factory(request, index));
+    }
+}
+
+sealed class FailingReadStream : Stream
+{
+    private readonly byte[] _data;
+    private int _position;
+    private bool _failed;
+
+    internal FailingReadStream(byte[] data) => _data = data;
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+    public override void Flush() { }
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        if (_failed) throw new IOException("Simulated interrupted network stream.");
+        _failed = true;
+        var copied = Math.Min(count, _data.Length);
+        Array.Copy(_data, 0, buffer, offset, copied);
+        _position += copied;
+        return copied;
+    }
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        if (_failed) return ValueTask.FromException<int>(new IOException("Simulated interrupted network stream."));
+        _failed = true;
+        var copied = Math.Min(buffer.Length, _data.Length);
+        _data.AsMemory(0, copied).CopyTo(buffer);
+        _position += copied;
+        return ValueTask.FromResult(copied);
+    }
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+}
