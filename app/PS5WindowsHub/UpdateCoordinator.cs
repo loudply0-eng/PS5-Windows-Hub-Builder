@@ -88,7 +88,7 @@ internal static class UpdateCoordinator
         }
     }
 
-    private static void ValidateMetadataUri(Uri uri, string expectedFileName)
+    internal static void ValidateMetadataUri(Uri uri, string expectedFileName)
     {
         var expectedPath = "/loudply0-eng/PS5-Windows-Hub-Builder/releases/latest/download/" + expectedFileName;
         if (!uri.IsAbsoluteUri || uri.Scheme != Uri.UriSchemeHttps || uri.Port != 443 ||
