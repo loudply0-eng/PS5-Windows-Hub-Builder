@@ -8,6 +8,24 @@ internal static class SafeUpdateArchiveExtractor
     private const int MaximumEntries = 100_000;
     private const long MaximumExpandedBytes = 8L * 1024 * 1024 * 1024;
     private const long MaximumSingleFileBytes = 4L * 1024 * 1024 * 1024;
+    private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
+
+    private static bool IsSafeWindowsSegment(string segment)
+    {
+        if (segment.Length is 0 or > 240 || segment is "." or ".." ||
+            segment.EndsWith(".", StringComparison.Ordinal) ||
+            segment.EndsWith(" ", StringComparison.Ordinal) ||
+            segment.Any(ch => ch < 32 || "<>\\"|?*:".Contains(ch)))
+            return false;
+
+        var stem = segment.Split('.')[0];
+        return !ReservedDeviceNames.Contains(stem);
+    }
 
     internal static void Extract(string archivePath, string destinationDirectory)
     {
@@ -62,8 +80,8 @@ internal static class SafeUpdateArchiveExtractor
             if (relative.Length == 0)
                 throw new InvalidDataException("Archive contains an empty path.");
             var segments = relative.Split('/');
-            if (segments.Length > 64 || segments.Any(s => s.Length == 0 || s is "." or ".."))
-                throw new InvalidDataException("Archive contains path traversal or empty path segments.");
+            if (segments.Length > 64 || segments.Any(s => !IsSafeWindowsSegment(s)))
+                throw new InvalidDataException("Archive contains traversal or a path segment unsafe on Windows.");
 
             if (!names.Add(relative))
                 throw new InvalidDataException("Archive contains duplicate paths (case-insensitive).");
