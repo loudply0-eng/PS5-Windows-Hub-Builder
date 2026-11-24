@@ -36,10 +36,12 @@ internal static class Program
         var stagingRoot = Path.GetFullPath(Path.Combine(localData, "PS5WindowsHub", "Updates", "Staging"));
         var stagingPrefix = Path.TrimEndingDirectorySeparator(stagingRoot) + Path.DirectorySeparatorChar;
         if (!payloadDirectory.StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase) ||
-            !Directory.Exists(payloadDirectory))
-            throw new InvalidDataException("Payload must be inside the application's update staging directory.");
+            !Directory.Exists(payloadDirectory) ||
+            (File.GetAttributes(payloadDirectory) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Payload must be a normal directory inside the application's update staging directory.");
 
         if (!Directory.Exists(installDirectory) ||
+            (File.GetAttributes(installDirectory) & FileAttributes.ReparsePoint) != 0 ||
             !File.Exists(Path.Combine(installDirectory, ApplicationFileName)))
             throw new InvalidDataException("The current application installation is invalid.");
 
