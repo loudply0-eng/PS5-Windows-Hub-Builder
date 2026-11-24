@@ -414,7 +414,6 @@ sealed class FailingReadStream : Stream
         _failed = true;
         var copied = Math.Min(buffer.Length, _data.Length);
         _data.AsMemory(0, copied).CopyTo(buffer);
-        _position += copied;
         return ValueTask.FromResult(copied);
     }
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
