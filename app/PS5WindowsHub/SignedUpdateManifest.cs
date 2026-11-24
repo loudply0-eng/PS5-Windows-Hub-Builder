@@ -5,14 +5,20 @@ using System.Text.RegularExpressions;
 
 namespace PS5WindowsHub;
 
-// Fail-closed verifier for the signed release manifest. The embedded public key
-// must be provisioned from the maintainer's offline key-generation process.
-// Never place the private signing key in this application or its build pipeline.
+// Fail-closed verifier. Only the public key belongs in the application.
 internal static class SignedUpdateManifest
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = false
+        PropertyNameCaseInsensitive = false,
+        AllowTrailingCommas = false,
+        ReadCommentHandling = JsonCommentHandling.Disallow
+    };
+
+    private static readonly HashSet<string> AllowedFields = new(StringComparer.Ordinal)
+    {
+        "version", "minimum_supported_version", "asset_name", "asset_url",
+        "size_bytes", "sha256", "release_notes"
     };
 
     internal sealed record Manifest
@@ -26,7 +32,7 @@ internal static class SignedUpdateManifest
         [JsonPropertyName("release_notes")] public string ReleaseNotes { get; init; } = "";
     }
 
-    internal static Manifest Verify(byte[] manifestBytes, string signatureBase64, string publicKeyBase64)
+    internal static Manifest Verify(byte[] manifestBytes, string signatureBase64, string publicKeyBase64, string installedVersion)
     {
         if (manifestBytes.Length is 0 or > 64 * 1024)
             throw new CryptographicException("Manifest size is invalid.");
@@ -45,14 +51,47 @@ internal static class SignedUpdateManifest
             throw new CryptographicException("Signature or public key encoding is invalid.", ex);
         }
 
+        // P-256 IEEE-P1363 signatures are exactly 64 bytes.
+        if (signature.Length != 64)
+            throw new CryptographicException("ECDSA P-256 signature length is invalid.");
+
         using var verifier = ECDsa.Create();
-        verifier.ImportSubjectPublicKeyInfo(publicKey, out var bytesRead);
-        if (bytesRead != publicKey.Length || !verifier.VerifyData(manifestBytes, signature, HashAlgorithmName.SHA256))
+        try
+        {
+            verifier.ImportSubjectPublicKeyInfo(publicKey, out var bytesRead);
+            if (bytesRead != publicKey.Length || verifier.KeySize != 256 ||
+                !string.Equals(verifier.ExportParameters(false).Curve.Oid.Value, "1.2.840.10045.3.1.7", StringComparison.Ordinal))
+                throw new CryptographicException("The embedded verification key is not a valid P-256 public key.");
+        }
+        catch (CryptographicException)
+        {
+            throw;
+        }
+
+        if (!verifier.VerifyData(manifestBytes, signature, HashAlgorithmName.SHA256))
             throw new CryptographicException("Release manifest signature is invalid.");
 
         Manifest manifest;
         try
         {
+            using var document = JsonDocument.Parse(manifestBytes, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+                MaxDepth = 4
+            });
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new JsonException("Manifest root must be an object.");
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (!AllowedFields.Contains(property.Name) || !seen.Add(property.Name))
+                    throw new JsonException("Unknown or duplicate manifest property.");
+            }
+            if (!seen.SetEquals(AllowedFields))
+                throw new JsonException("Manifest is missing required properties.");
+
             manifest = JsonSerializer.Deserialize<Manifest>(manifestBytes, JsonOptions)
                 ?? throw new JsonException("Manifest is empty.");
         }
@@ -63,8 +102,10 @@ internal static class SignedUpdateManifest
 
         if (!Version.TryParse(manifest.Version, out var version) ||
             !Version.TryParse(manifest.MinimumSupportedVersion, out var minimum) ||
-            version < minimum)
-            throw new CryptographicException("Manifest version constraints are invalid.");
+            !Version.TryParse(installedVersion, out var installed) ||
+            version < minimum || minimum > installed || version <= installed)
+            throw new CryptographicException("Manifest version constraints reject downgrade or unsupported installation.");
+
         if (manifest.SizeBytes is <= 0 or > 4L * 1024 * 1024 * 1024)
             throw new CryptographicException("Asset size is outside the allowed range.");
         if (!Regex.IsMatch(manifest.AssetName, @"\APS5-Windows-Hub-[A-Za-z0-9._-]+\.zip\z", RegexOptions.CultureInvariant))
@@ -72,9 +113,12 @@ internal static class SignedUpdateManifest
         if (!Regex.IsMatch(manifest.Sha256, @"\A[0-9a-fA-F]{64}\z", RegexOptions.CultureInvariant))
             throw new CryptographicException("SHA-256 digest is invalid.");
         if (!Uri.TryCreate(manifest.AssetUrl, UriKind.Absolute, out var assetUri) ||
-            assetUri.Scheme != Uri.UriSchemeHttps ||
-            !string.Equals(assetUri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
-            throw new CryptographicException("Update asset URL is not an approved HTTPS GitHub URL.");
+            assetUri.Scheme != Uri.UriSchemeHttps || assetUri.Port != 443 ||
+            !string.Equals(assetUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(assetUri.UserInfo) || !string.IsNullOrEmpty(assetUri.Fragment) ||
+            !assetUri.AbsolutePath.Contains("/releases/download/", StringComparison.Ordinal) ||
+            !string.Equals(Uri.UnescapeDataString(Path.GetFileName(assetUri.AbsolutePath)), manifest.AssetName, StringComparison.Ordinal))
+            throw new CryptographicException("Update asset URL is not the exact approved GitHub release asset.");
         if (manifest.ReleaseNotes.Length > 16 * 1024)
             throw new CryptographicException("Release notes are too large.");
 
