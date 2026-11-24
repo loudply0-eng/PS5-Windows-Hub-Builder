@@ -32,6 +32,13 @@ internal static class SignedUpdateManifest
         [JsonPropertyName("release_notes")] public string ReleaseNotes { get; init; } = "";
     }
 
+    private static bool IsStableVersion(string value, out Version version)
+    {
+        version = new Version(0, 0, 0);
+        return Regex.IsMatch(value, @"\A(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant) &&
+            Version.TryParse(value, out version);
+    }
+
     internal static Manifest Verify(byte[] manifestBytes, string signatureBase64, string publicKeyBase64, string installedVersion)
     {
         if (manifestBytes.Length is 0 or > 64 * 1024)
@@ -101,23 +108,26 @@ internal static class SignedUpdateManifest
             throw new CryptographicException("Signed manifest JSON is invalid.", ex);
         }
 
-        if (!Version.TryParse(manifest.Version, out var version) ||
-            !Version.TryParse(manifest.MinimumSupportedVersion, out var minimum) ||
-            !Version.TryParse(installedVersion, out var installed) ||
+        if (!IsStableVersion(manifest.Version, out var version) ||
+            !IsStableVersion(manifest.MinimumSupportedVersion, out var minimum) ||
+            !IsStableVersion(installedVersion, out var installed) ||
             version < minimum || minimum > installed || version <= installed)
             throw new CryptographicException("Manifest version constraints reject downgrade or unsupported installation.");
 
         if (manifest.SizeBytes is <= 0 or > 4L * 1024 * 1024 * 1024)
             throw new CryptographicException("Asset size is outside the allowed range.");
-        if (!Regex.IsMatch(manifest.AssetName, @"\APS5-Windows-Hub-[A-Za-z0-9._-]+\.zip\z", RegexOptions.CultureInvariant))
-            throw new CryptographicException("Unexpected update asset name.");
+        var expectedAssetName = $"PS5-Windows-Hub-{manifest.Version}.zip";
+        if (!Regex.IsMatch(manifest.AssetName, @"\APS5-Windows-Hub-[A-Za-z0-9._-]+\.zip\z", RegexOptions.CultureInvariant) ||
+            !string.Equals(manifest.AssetName, expectedAssetName, StringComparison.Ordinal))
+            throw new CryptographicException("Unexpected update asset name or version.");
         if (!Regex.IsMatch(manifest.Sha256, @"\A[0-9a-fA-F]{64}\z", RegexOptions.CultureInvariant))
             throw new CryptographicException("SHA-256 digest is invalid.");
         if (!Uri.TryCreate(manifest.AssetUrl, UriKind.Absolute, out var assetUri) ||
             assetUri.Scheme != Uri.UriSchemeHttps || assetUri.Port != 443 ||
             !string.Equals(assetUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
             !string.IsNullOrEmpty(assetUri.UserInfo) || !string.IsNullOrEmpty(assetUri.Fragment) ||
-            !assetUri.AbsolutePath.Contains("/releases/download/", StringComparison.Ordinal) ||
+            !string.IsNullOrEmpty(assetUri.Query) ||
+            !assetUri.AbsolutePath.Contains($"/releases/download/v{manifest.Version}/", StringComparison.Ordinal) ||
             !string.Equals(Uri.UnescapeDataString(Path.GetFileName(assetUri.AbsolutePath)), manifest.AssetName, StringComparison.Ordinal))
             throw new CryptographicException("Update asset URL is not the exact approved GitHub release asset.");
         if (manifest.ReleaseNotes.Length > 16 * 1024)
