@@ -46,10 +46,12 @@ internal static class SignedUpdateManifest
 
     internal static Manifest Verify(byte[] manifestBytes, string signatureBase64, string publicKeyBase64, string installedVersion)
     {
-        if (manifestBytes.Length is 0 or > 64 * 1024)
+        if (manifestBytes is null || manifestBytes.Length is 0 or > 64 * 1024)
             throw new CryptographicException("Manifest size is invalid.");
-        if (string.IsNullOrWhiteSpace(publicKeyBase64))
-            throw new CryptographicException("Update verification key has not been provisioned.");
+        if (string.IsNullOrWhiteSpace(publicKeyBase64) || publicKeyBase64.Length > 512)
+            throw new CryptographicException("Update verification key is missing or oversized.");
+        if (string.IsNullOrWhiteSpace(signatureBase64) || signatureBase64.Length > 256)
+            throw new CryptographicException("Detached signature is missing or oversized.");
 
         byte[] signature;
         byte[] publicKey;
@@ -107,6 +109,10 @@ internal static class SignedUpdateManifest
 
             manifest = JsonSerializer.Deserialize<Manifest>(manifestBytes, JsonOptions)
                 ?? throw new JsonException("Manifest is empty.");
+            if (manifest.Version is null || manifest.MinimumSupportedVersion is null ||
+                manifest.AssetName is null || manifest.AssetUrl is null ||
+                manifest.Sha256 is null || manifest.ReleaseNotes is null)
+                throw new JsonException("Manifest string fields must not be null.");
         }
         catch (JsonException ex)
         {
