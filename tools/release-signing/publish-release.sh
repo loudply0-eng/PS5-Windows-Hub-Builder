@@ -24,6 +24,10 @@ if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; th
   echo "Invalid stable release version: $VERSION" >&2
   exit 1
 fi
+if [[ ! "$TARGET_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "Target must be a full 40-character commit SHA." >&2
+  exit 1
+fi
 for file in "$ASSET" "$SOURCE" "$LICENSE" "$MANIFEST" "$SIGNATURE" "$PUBLIC_KEY" "$NOTES"; do
   [[ -f "$file" ]] || { echo "Required release file is missing: $file" >&2; exit 1; }
 done
