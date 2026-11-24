@@ -119,6 +119,31 @@ Check("unapproved asset host rejected", () =>
     throw new Exception("Unapproved host was accepted.");
 });
 
+Check("asset filename must match signed version", () =>
+{
+    var bytes = BuildManifest(version: "1.2.0");
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("Asset name/version mismatch was accepted.");
+});
+
+Check("malformed signed JSON rejected", () =>
+{
+    var bytes = Encoding.UTF8.GetBytes("{not-json");
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("Malformed signed JSON was accepted.");
+});
+
+Check("noncanonical version rejected", () =>
+{
+    var bytes = BuildManifest(version: "01.1.0");
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("Noncanonical version was accepted.");
+});
+
+
 Check("oversized manifest rejected", () =>
 {
     var bytes = new byte[64 * 1024 + 1];
