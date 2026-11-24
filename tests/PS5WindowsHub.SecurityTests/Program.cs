@@ -24,6 +24,44 @@ byte[] BuildManifest(string version = "1.1.0", string url = "https://github.com/
 string Sign(byte[] bytes, ECDsa? key = null) =>
     Convert.ToBase64String((key ?? trustedKey).SignData(bytes, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
 
+string testRoot = Path.Combine(Path.GetTempPath(), "PS5WindowsHub-SecurityTests-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(testRoot);
+
+void BuildZip(string zipPath, params (string Name, int Attributes, string Content)[] entries)
+{
+    using var file = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write);
+    using var zip = new System.IO.Compression.ZipArchive(file, System.IO.Compression.ZipArchiveMode.Create);
+    foreach (var item in entries)
+    {
+        var entry = zip.CreateEntry(item.Name);
+        entry.ExternalAttributes = item.Attributes;
+        using var stream = entry.Open();
+        var bytes = Encoding.UTF8.GetBytes(item.Content);
+        stream.Write(bytes, 0, bytes.Length);
+    }
+}
+
+void ExpectArchiveRejected(string testName, params (string Name, int Attributes, string Content)[] entries)
+{
+    Check(testName, () =>
+    {
+        var zipPath = Path.Combine(testRoot, Guid.NewGuid().ToString("N") + ".zip");
+        var destination = Path.Combine(testRoot, Guid.NewGuid().ToString("N"));
+        BuildZip(zipPath, entries);
+        try
+        {
+            SafeUpdateArchiveExtractor.Extract(zipPath, destination);
+            throw new Exception("Unsafe archive was accepted.");
+        }
+        catch (InvalidDataException) { }
+        finally
+        {
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+            if (Directory.Exists(destination)) Directory.Delete(destination, recursive: true);
+        }
+    });
+}
+
 Check("valid P-256 signature accepted", () =>
 {
     var bytes = BuildManifest();
@@ -89,5 +127,36 @@ Check("oversized manifest rejected", () =>
     throw new Exception("Oversized manifest was accepted.");
 });
 
+
+Check("safe ZIP extraction succeeds", () =>
+{
+    var zipPath = Path.Combine(testRoot, Guid.NewGuid().ToString("N") + ".zip");
+    var destination = Path.Combine(testRoot, Guid.NewGuid().ToString("N"));
+    BuildZip(zipPath, ("bin/PS5-Windows-Hub.exe", 0, "verified-app"));
+    try
+    {
+        SafeUpdateArchiveExtractor.Extract(zipPath, destination);
+        var extracted = File.ReadAllText(Path.Combine(destination, "bin", "PS5-Windows-Hub.exe"));
+        if (extracted != "verified-app") throw new Exception("Extracted file content differs.");
+    }
+    finally
+    {
+        if (File.Exists(zipPath)) File.Delete(zipPath);
+        if (Directory.Exists(destination)) Directory.Delete(destination, recursive: true);
+    }
+});
+
+ExpectArchiveRejected("ZIP parent traversal rejected", ("../escape.txt", 0, "x"));
+ExpectArchiveRejected("ZIP rooted path rejected", ("/rooted.txt", 0, "x"));
+ExpectArchiveRejected("ZIP duplicate paths rejected",
+    ("same.txt", 0, "one"), ("same.txt", 0, "two"));
+ExpectArchiveRejected("ZIP case-insensitive duplicate paths rejected",
+    ("Folder/File.txt", 0, "one"), ("folder/file.txt", 0, "two"));
+ExpectArchiveRejected("ZIP file/directory collision rejected",
+    ("node", 0, "file"), ("node/child.txt", 0, "child"));
+ExpectArchiveRejected("ZIP symbolic link rejected",
+    ("link", unchecked((int)0xA0000000u), "target"));
+
 Console.WriteLine($"Security tests: {passed} passed, {failed} failed.");
+try { Directory.Delete(testRoot, recursive: true); } catch { }
 return failed == 0 ? 0 : 1;
