@@ -20,7 +20,7 @@ internal static class SafeUpdateArchiveExtractor
         if (segment.Length is 0 or > 240 || segment is "." or ".." ||
             segment.EndsWith(".", StringComparison.Ordinal) ||
             segment.EndsWith(" ", StringComparison.Ordinal) ||
-            segment.Any(ch => ch < 32 || "<>\\"|?*:".Contains(ch)))
+            segment.Any(ch => ch < 32 || ch is '<' or '>' or '"' or '|' or '?' or '*' or ':'))
             return false;
 
         var stem = segment.Split('.')[0];
