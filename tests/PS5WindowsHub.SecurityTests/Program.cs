@@ -163,6 +163,19 @@ Check("oversized manifest rejected", () =>
     throw new Exception("Oversized manifest was accepted.");
 });
 
+Check("release metadata endpoints are pinned", () =>
+{
+    UpdateCoordinator.ValidateMetadataUri(UpdateTrust.ManifestUri, "manifest.json");
+    UpdateCoordinator.ValidateMetadataUri(UpdateTrust.SignatureUri, "manifest.sig.base64");
+    try
+    {
+        UpdateCoordinator.ValidateMetadataUri(new Uri("https://evil.example/manifest.json"), "manifest.json");
+    }
+    catch (InvalidOperationException) { return; }
+    throw new Exception("Unapproved metadata endpoint was accepted.");
+});
+
+
 
 Check("safe ZIP extraction succeeds", () =>
 {
