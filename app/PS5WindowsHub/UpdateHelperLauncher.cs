@@ -18,15 +18,30 @@ internal static class UpdateHelperLauncher
         if (!File.Exists(helperSource) || (File.GetAttributes(helperSource) & FileAttributes.ReparsePoint) != 0)
             throw new FileNotFoundException("The standalone updater helper is missing or unsafe.", helperSource);
 
-        var helperDirectory = Path.Combine(
+        var appDataDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PS5WindowsHub", "Updater");
+            "PS5WindowsHub");
+        Directory.CreateDirectory(appDataDirectory);
+        if ((File.GetAttributes(appDataDirectory) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("The application data directory cannot be a reparse point.");
+
+        var helperDirectory = Path.Combine(appDataDirectory, "Updater");
         Directory.CreateDirectory(helperDirectory);
         if ((File.GetAttributes(helperDirectory) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidDataException("The updater helper directory cannot be a reparse point.");
 
         var helperCopy = Path.Combine(helperDirectory, "PS5WindowsHub.Updater.exe");
-        File.Copy(helperSource, helperCopy, overwrite: true);
+        if (File.Exists(helperCopy))
+        {
+            if ((File.GetAttributes(helperCopy) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("The existing updater helper file cannot be a reparse point.");
+            File.Delete(helperCopy);
+        }
+        File.Copy(helperSource, helperCopy, overwrite: false);
+        var sourceInfo = new FileInfo(helperSource);
+        var copiedInfo = new FileInfo(helperCopy);
+        if (sourceInfo.Length != copiedInfo.Length)
+            throw new IOException("The copied updater helper has an unexpected size.");
 
         var start = new ProcessStartInfo
         {
