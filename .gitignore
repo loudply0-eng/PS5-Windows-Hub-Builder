@@ -1,0 +1,22 @@
+# Secrets and local credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+*.jks
+*.keystore
+secrets/
+credentials/
+# Build output
+build/
+dist/
+out/
+.cache/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
