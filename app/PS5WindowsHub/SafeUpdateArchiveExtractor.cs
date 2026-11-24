@@ -19,6 +19,19 @@ internal static class SafeUpdateArchiveExtractor
             throw new IOException("Archive extraction destination must be empty.");
 
         Directory.CreateDirectory(destinationDirectory);
+        try
+        {
+            ExtractIntoEmptyDirectory(archivePath, destinationDirectory);
+        }
+        catch
+        {
+            try { Directory.Delete(destinationDirectory, recursive: true); } catch { /* best-effort staging cleanup */ }
+            throw;
+        }
+    }
+
+    private static void ExtractIntoEmptyDirectory(string archivePath, string destinationDirectory)
+    {
         var root = Path.GetFullPath(destinationDirectory);
         var rootPrefix = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
 
