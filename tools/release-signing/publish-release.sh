@@ -47,6 +47,15 @@ if [[ "${BUILT_COMMIT,,}" != "${TARGET_COMMIT,,}" ]]; then
 fi
 gh auth status --hostname github.com >/dev/null
 python3 "$SCRIPT_DIR/verify-manifest.py" "$MANIFEST" "$ASSET" "$PUBLIC_KEY" "$SIGNATURE"
+PUBLIC_KEY_INFO="$(openssl pkey -pubin -in "$PUBLIC_KEY" -text -noout)"
+grep -q 'Public-Key: (256 bit)' <<<"$PUBLIC_KEY_INFO"
+grep -q 'ASN1 OID: prime256v1' <<<"$PUBLIC_KEY_INFO"
+EMBEDDED_KEY="$(gh api "repos/$REPOSITORY/contents/app/PS5WindowsHub/UpdateTrust.cs?ref=$TARGET_COMMIT" --jq '.content' | base64 -d | sed -n 's/.*PublicKeyBase64 = "\\([^"]*\\)".*/\\1/p')"
+SUPPLIED_KEY="$(openssl pkey -pubin -in "$PUBLIC_KEY" -outform DER | base64 | tr -d '\\r\\n')"
+if [[ -z "$EMBEDDED_KEY" || "$EMBEDDED_KEY" != "$SUPPLIED_KEY" ]]; then
+  echo "The public key used to sign this release does not match the key embedded in the target application source." >&2
+  exit 1
+fi
 if gh api "repos/$REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
   echo "Git tag $TAG already exists. Refusing to publish against an unverified tag." >&2
   exit 1
