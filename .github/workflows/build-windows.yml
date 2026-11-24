@@ -96,7 +96,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o updater-publish
+          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o updater-publish
           Copy-Item updater-publish/PS5WindowsHub.Updater.exe app-publish/PS5WindowsHub.Updater.exe
 
       - name: Run updater transaction integration tests
