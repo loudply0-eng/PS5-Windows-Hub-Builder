@@ -283,7 +283,7 @@ await CheckAsync("verified downloader rejects a wrong hash and clears staging", 
         await VerifiedUpdateDownloader.DownloadAsync(badManifest, client, staging);
         throw new Exception("A package with the wrong hash was accepted.");
     }
-    catch (InvalidDataException) { }
+    catch (CryptographicException) { }
     if (Directory.Exists(staging) && Directory.EnumerateFileSystemEntries(staging).Any())
         throw new Exception("Failed download left staged files behind.");
 });
