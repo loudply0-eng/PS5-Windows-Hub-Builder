@@ -4,7 +4,7 @@ These scripts are intended to run locally on the maintainer's phone (for example
 
 ## 1. Generate the key once
 
-Install OpenSSL on the phone, then run:
+On Termux, install the local tools with `pkg install openssl python`, then run:
 
 ```sh
 bash tools/release-signing/generate-key.sh
