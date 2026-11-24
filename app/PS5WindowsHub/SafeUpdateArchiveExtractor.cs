@@ -43,6 +43,7 @@ internal static class SafeUpdateArchiveExtractor
         var planned = new List<(ZipArchiveEntry Entry, string RelativePath, bool IsDirectory)>(archive.Entries.Count);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var directoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         long declaredTotal = 0;
 
         foreach (var entry in archive.Entries)
@@ -54,12 +55,14 @@ internal static class SafeUpdateArchiveExtractor
                 raw.Contains(':'))
                 throw new InvalidDataException("Archive contains a rooted or invalid path.");
 
+            if (raw.Length > 1024)
+                throw new InvalidDataException("Archive path is too long.");
             var isDirectory = raw.EndsWith("/", StringComparison.Ordinal);
             var relative = isDirectory ? raw[..^1] : raw;
             if (relative.Length == 0)
                 throw new InvalidDataException("Archive contains an empty path.");
             var segments = relative.Split('/');
-            if (segments.Any(s => s.Length == 0 || s is "." or ".."))
+            if (segments.Length > 64 || segments.Any(s => s.Length == 0 || s is "." or ".."))
                 throw new InvalidDataException("Archive contains path traversal or empty path segments.");
 
             if (!names.Add(relative))
@@ -69,6 +72,11 @@ internal static class SafeUpdateArchiveExtractor
             if ((entry.ExternalAttributes & (int)FileAttributes.ReparsePoint) != 0 ||
                 (unixType != 0 && unixType != 0x8000 && unixType != 0x4000))
                 throw new InvalidDataException("Archive contains a link or unsupported special file.");
+
+            for (var i = 1; i < segments.Length; i++)
+                directoryNames.Add(string.Join("/", segments.Take(i)));
+            if (isDirectory)
+                directoryNames.Add(relative);
 
             if (!isDirectory)
             {
@@ -82,19 +90,8 @@ internal static class SafeUpdateArchiveExtractor
             planned.Add((entry, relative, isDirectory));
         }
 
-        foreach (var item in planned)
-        {
-            var parts = item.RelativePath.Split('/');
-            for (var i = 1; i < parts.Length; i++)
-            {
-                var parent = string.Join("/", parts.Take(i));
-                if (fileNames.Contains(parent))
-                    throw new InvalidDataException("Archive contains a file/directory path collision.");
-            }
-            if (!item.IsDirectory && planned.Any(other =>
-                    other.IsDirectory && other.RelativePath.StartsWith(item.RelativePath + "/", StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidDataException("Archive contains a file/directory path collision.");
-        }
+        if (fileNames.Overlaps(directoryNames))
+            throw new InvalidDataException("Archive contains a file/directory path collision.");
 
         long writtenTotal = 0;
         foreach (var item in planned)
