@@ -141,6 +141,14 @@ Check("unapproved asset host rejected", () =>
     throw new Exception("Unapproved host was accepted.");
 });
 
+Check("asset URL must use the exact Builder repository", () =>
+{
+    var bytes = BuildManifest(url: "https://github.com/attacker/other/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip");
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("A different repository URL was accepted.");
+});
+
 Check("asset filename must match signed version", () =>
 {
     var bytes = BuildManifest(version: "1.2.0");
