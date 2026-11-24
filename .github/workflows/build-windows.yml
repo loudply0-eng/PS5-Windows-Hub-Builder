@@ -108,7 +108,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UpdaterTestMode=true -o updater-test-publish
+          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UpdaterTestMode=true -p:BaseIntermediateOutputPath=obj/updater-test/ -p:BaseOutputPath=bin/updater-test/ -o updater-test-publish
 
       - name: Run updater transaction integration tests
         shell: pwsh
@@ -134,15 +134,18 @@ jobs:
 
           $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
           [void]$mutex.WaitOne()
-          $psi = [System.Diagnostics.ProcessStartInfo]::new()
-          $psi.FileName = $helper
-          $psi.UseShellExecute = $false
-          foreach ($arg in @('--install-dir',$install,'--payload-dir',$payload,'--parent-pid',"$parentPid")) { $psi.ArgumentList.Add($arg) }
-          $p = [System.Diagnostics.Process]::Start($psi)
-          Start-Sleep -Seconds 2
-          $mutex.ReleaseMutex()
-          $mutex.Dispose()
-          $p.WaitForExit()
+          try {
+            $psi = [System.Diagnostics.ProcessStartInfo]::new()
+            $psi.FileName = $helper
+            $psi.UseShellExecute = $false
+            foreach ($arg in @('--install-dir',$install,'--payload-dir',$payload,'--parent-pid',"$parentPid")) { $psi.ArgumentList.Add($arg) }
+            $p = [System.Diagnostics.Process]::Start($psi)
+            Start-Sleep -Seconds 2
+          } finally {
+            $mutex.ReleaseMutex()
+            $mutex.Dispose()
+          }
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw 'Updater success-path test timed out.' }
           if ($p.ExitCode -ne 0) { throw "Updater successful-install test failed with exit code $($p.ExitCode)." }
           if (-not (Test-Path (Join-Path $install 'PS5-Windows-Hub.exe'))) { throw 'Updated application executable is missing.' }
           if (-not (Get-ChildItem $env:RUNNER_TEMP -Directory -Filter $backupPattern)) { throw 'Previous-version backup was not retained.' }
@@ -157,7 +160,7 @@ jobs:
           $psi2.UseShellExecute = $false
           foreach ($arg in @('--install-dir',$install,'--payload-dir',$badPayload,'--parent-pid',"$parentPid")) { $psi2.ArgumentList.Add($arg) }
           $p2 = [System.Diagnostics.Process]::Start($psi2)
-          $p2.WaitForExit()
+          if (-not $p2.WaitForExit(120000)) { $p2.Kill(); throw 'Updater rollback test timed out.' }
           if ($p2.ExitCode -eq 0) { throw 'Updater accepted a corrupt application during rollback test.' }
           $afterRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
           if ($beforeRollback -ne $afterRollback) { throw 'Failed update did not restore the prior application.' }
