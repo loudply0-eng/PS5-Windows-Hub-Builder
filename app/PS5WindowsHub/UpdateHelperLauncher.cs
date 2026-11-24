@@ -15,13 +15,18 @@ internal static class UpdateHelperLauncher
             throw new InvalidDataException("Verified update payload must remain inside the update staging directory.");
 
         var helperSource = Path.Combine(AppContext.BaseDirectory, "PS5WindowsHub.Updater.exe");
-        if (!File.Exists(helperSource))
-            throw new FileNotFoundException("The standalone updater helper is missing.", helperSource);
+        if (!File.Exists(helperSource) || (File.GetAttributes(helperSource) & FileAttributes.ReparsePoint) != 0)
+            throw new FileNotFoundException("The standalone updater helper is missing or unsafe.", helperSource);
 
-        var helperDirectory = Path.Combine(Path.GetDirectoryName(payload)!, "Updater-" + Guid.NewGuid().ToString("N"));
+        var helperDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PS5WindowsHub", "Updater");
         Directory.CreateDirectory(helperDirectory);
+        if ((File.GetAttributes(helperDirectory) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("The updater helper directory cannot be a reparse point.");
+
         var helperCopy = Path.Combine(helperDirectory, "PS5WindowsHub.Updater.exe");
-        File.Copy(helperSource, helperCopy, overwrite: false);
+        File.Copy(helperSource, helperCopy, overwrite: true);
 
         var start = new ProcessStartInfo
         {
