@@ -12,6 +12,7 @@ internal static class Program
         using var updateMutex = new Mutex(initiallyOwned: false, name: @"Local\PS5WindowsHub.UpdateTransaction");
         var ownsMutex = false;
         var transactionStarted = false;
+        var applySucceeded = false;
         (string InstallDirectory, string PayloadDirectory, int ParentProcessId)? options = null;
         Exception? updateError = null;
 
@@ -25,6 +26,7 @@ internal static class Program
 
             transactionStarted = true;
             Apply(options.Value.InstallDirectory, options.Value.PayloadDirectory, options.Value.ParentProcessId);
+            applySucceeded = true;
         }
         catch (Exception ex)
         {
@@ -50,8 +52,11 @@ internal static class Program
             {
                 try
                 {
+                    var message = applySucceeded
+                        ? "The update was installed, but the application could not restart. You can start it manually.\n\n"
+                        : "The update could not be completed. The previous version has been restored when possible.\n\n";
                     MessageBox.Show(
-                        "The update could not be completed. The previous version has been restored when possible.\n\n" + updateError.Message,
+                        message + updateError.Message,
                         "PS5 WINDOWS HUB — Update",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
