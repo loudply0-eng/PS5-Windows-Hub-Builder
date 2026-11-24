@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ps5-windows-hub-build
-  cancel-in-progress: false
+  group: ps5-windows-hub-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
