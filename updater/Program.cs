@@ -3,7 +3,7 @@ using System.Diagnostics;
 internal static class Program
 {
     private const string ApplicationFileName = "PS5-Windows-Hub.exe";
-    private const long MaximumCopiedBytes = 8L * 1024 * 1024 * 1024;
+    private const long MaximumCopiedBytes = 1L * 1024 * 1024 * 1024;
     private const int MaximumFiles = 100_000;
 
     private static int Main(string[] args)
