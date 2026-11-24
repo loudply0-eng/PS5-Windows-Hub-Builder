@@ -1,0 +1,94 @@
+name: Build AnyPS5 Windows relinker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ps5-windows-hub-build
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    if: github.actor == 'loudply0-eng'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout builder workflow
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Install pinned MSYS2 toolchain environment
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-python
+
+      - name: Fetch upstream AnyPS5 source at fixed release
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.1.5 https://github.com/boykopovar/AnyPS5.git upstream
+          actual="$(git -C upstream rev-parse HEAD)"
+          expected="62bd7dd61e2b8a7a59262c4c145edff549bae5b9"
+          test "$actual" = "$expected"
+          echo "Verified AnyPS5 v0.1.5 source: $actual"
+
+      - name: Configure relinker-only Windows build
+        run: |
+          set -euo pipefail
+          cmake -S upstream -B build-relinker -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DANYPS5_RELINKER_ONLY=ON \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake --build build-relinker --parallel 2
+
+      - name: Run relinker tests
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-relinker --output-on-failure
+
+      - name: Prepare binaries, corresponding source and checksums
+        run: |
+          set -euo pipefail
+          test -f build-relinker/core/relinker/relinker.exe
+          mkdir -p dist
+          cp build-relinker/core/relinker/relinker.exe dist/relinker.exe
+          cp upstream/LICENSE dist/LICENSE-AnyPS5.txt
+          git -C upstream archive --format=zip --output=dist/AnyPS5-v0.1.5-source.zip HEAD
+          printf '%s\n' \
+            'PS5 Windows Hub - engine build preview' \
+            'Build scope: AnyPS5 relinker-only (not the complete game runtime)' \
+            'Upstream: https://github.com/boykopovar/AnyPS5' \
+            'Upstream tag: v0.1.5' \
+            'Upstream commit: 62bd7dd61e2b8a7a59262c4c145edff549bae5b9' \
+            'License: GPL-2.0-only' \
+            'The matching upstream source archive and license are included.' \
+            > dist/BUILD-INFO.txt
+          sha256sum dist/relinker.exe dist/AnyPS5-v0.1.5-source.zip > dist/SHA256SUMS.txt
+
+      - name: Upload Windows build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PS5-Windows-Hub-Engine-Preview
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
