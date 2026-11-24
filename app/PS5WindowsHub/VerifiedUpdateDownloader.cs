@@ -5,9 +5,18 @@ namespace PS5WindowsHub;
 
 internal static class VerifiedUpdateDownloader
 {
+    private const int MaximumRedirects = 5;
+    private static readonly HashSet<string> ApprovedDownloadHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "github.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com",
+        "github-releases.githubusercontent.com"
+    };
+
     private static readonly HttpClient Client = new(new HttpClientHandler
     {
-        AllowAutoRedirect = true,
+        AllowAutoRedirect = false,
         AutomaticDecompression = DecompressionMethods.None
     })
     {
@@ -21,7 +30,9 @@ internal static class VerifiedUpdateDownloader
     {
         if (!Uri.TryCreate(manifest.AssetUrl, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
-            !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            uri.Port != 443 ||
+            !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(uri.UserInfo))
             throw new InvalidOperationException("The signed update URL is not an approved GitHub HTTPS URL.");
 
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -33,7 +44,7 @@ internal static class VerifiedUpdateDownloader
 
         try
         {
-            using var response = await Client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await SendWithApprovedRedirectsAsync(uri, cancellationToken);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength is long declared && declared != manifest.SizeBytes)
                 throw new InvalidDataException("The downloaded asset length does not match the signed manifest.");
@@ -59,9 +70,9 @@ internal static class VerifiedUpdateDownloader
             if (total != manifest.SizeBytes)
                 throw new InvalidDataException("The downloaded asset is incomplete.");
 
-            var actualHash = Convert.ToHexString(hash.GetHashAndReset());
-            if (!CryptographicOperations.FixedTimeEquals(
-                Convert.FromHexString(actualHash), Convert.FromHexString(manifest.Sha256)))
+            var expectedHash = Convert.FromHexString(manifest.Sha256);
+            var actualHash = hash.GetHashAndReset();
+            if (!CryptographicOperations.FixedTimeEquals(actualHash, expectedHash))
                 throw new CryptographicException("The update asset SHA-256 digest does not match the signed manifest.");
 
             return destination;
@@ -72,4 +83,33 @@ internal static class VerifiedUpdateDownloader
             throw;
         }
     }
+
+    private static async Task<HttpResponseMessage> SendWithApprovedRedirectsAsync(Uri initialUri, CancellationToken cancellationToken)
+    {
+        var current = initialUri;
+        for (var hop = 0; hop <= MaximumRedirects; hop++)
+        {
+            if (current.Scheme != Uri.UriSchemeHttps || current.Port != 443 ||
+                !string.IsNullOrEmpty(current.UserInfo) || !ApprovedDownloadHosts.Contains(current.Host))
+                throw new InvalidDataException("The update download attempted to use an unapproved redirect destination.");
+
+            var response = await Client.GetAsync(current, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!IsRedirect(response.StatusCode))
+                return response;
+
+            var location = response.Headers.Location;
+            response.Dispose();
+            if (location is null || hop == MaximumRedirects)
+                throw new InvalidDataException("The update download redirect chain is invalid or too long.");
+
+            current = location.IsAbsoluteUri ? location : new Uri(current, location);
+        }
+
+        throw new InvalidDataException("The update download redirect chain exceeded its limit.");
+    }
+
+    private static bool IsRedirect(HttpStatusCode status) =>
+        status is HttpStatusCode.MovedPermanently or HttpStatusCode.Redirect or
+            HttpStatusCode.RedirectMethod or HttpStatusCode.TemporaryRedirect or
+            HttpStatusCode.PermanentRedirect;
 }
