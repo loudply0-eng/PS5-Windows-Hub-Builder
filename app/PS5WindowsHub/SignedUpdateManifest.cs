@@ -119,7 +119,7 @@ internal static class SignedUpdateManifest
             version < minimum || minimum > installed || version <= installed)
             throw new CryptographicException("Manifest version constraints reject downgrade or unsupported installation.");
 
-        if (manifest.SizeBytes is <= 0 or > 4L * 1024 * 1024 * 1024)
+        if (manifest.SizeBytes is <= 0 or > 1L * 1024 * 1024 * 1024)
             throw new CryptographicException("Asset size is outside the allowed range.");
         var expectedAssetName = $"PS5-Windows-Hub-{manifest.Version}.zip";
         if (!Regex.IsMatch(manifest.AssetName, @"\APS5-Windows-Hub-[A-Za-z0-9._-]+\.zip\z", RegexOptions.CultureInvariant) ||
