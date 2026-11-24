@@ -87,6 +87,17 @@ Check("signature from another key rejected", () =>
     throw new Exception("Wrong signing key was accepted.");
 });
 
+Check("non-P-256 public key rejected", () =>
+{
+    using var wrongCurve = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+    var wrongCurvePublicKey = Convert.ToBase64String(wrongCurve.ExportSubjectPublicKeyInfo());
+    var bytes = BuildManifest();
+    try { SignedUpdateManifest.Verify(bytes, Sign(bytes), wrongCurvePublicKey, "1.0.0"); }
+    catch (CryptographicException) { return; }
+    throw new Exception("Non-P-256 verification key was accepted.");
+});
+
+
 Check("duplicate JSON property rejected", () =>
 {
     var bytes = BuildManifest(extra: ",\"version\":\"1.2.0\"");
