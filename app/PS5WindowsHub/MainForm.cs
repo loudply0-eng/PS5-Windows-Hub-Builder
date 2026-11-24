@@ -13,6 +13,7 @@ internal sealed class MainForm : Form
     private readonly Button update = new();
     private readonly Label status = new();
     private readonly RichTextBox log = new();
+    private const bool EnableSecureUpdates = false; // Do not change until release signing and end-to-end update tests are complete.
     private string Engine => Path.Combine(AppContext.BaseDirectory, "relinker.exe");
 
     public MainForm()
@@ -47,8 +48,9 @@ internal sealed class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 8, 0, 0), BackColor = BackColor };
         StyleButton(convert, "تحويل إلى Windows", Color.FromArgb(35, 105, 210), 190);
         convert.Click += async (_, _) => await ConvertAsync();
-        StyleButton(update, "التحديث الآمن — قريباً", Color.FromArgb(54, 63, 78), 220);
-        update.Enabled = false;
+        StyleButton(update, "التحديث الآمن — غير مفعّل", Color.FromArgb(54, 63, 78), 220);
+        update.Click += async (_, _) => await CheckForUpdatesAsync();
+        update.Enabled = EnableSecureUpdates && !string.IsNullOrWhiteSpace(UpdateTrust.PublicKeyBase64);
         actions.Controls.Add(convert);
         actions.Controls.Add(update);
         root.Controls.Add(actions, 0, 3);
@@ -126,6 +128,31 @@ internal sealed class MainForm : Form
     {
         using var dialog = new SaveFileDialog { Title = "حفظ نسخة Windows", Filter = "Windows executable (*.exe)|*.exe", DefaultExt = "exe", AddExtension = true, OverwritePrompt = true, FileName = string.IsNullOrWhiteSpace(output.Text) ? "game_windows.exe" : Path.GetFileName(output.Text) };
         if (dialog.ShowDialog(this) == DialogResult.OK) output.Text = dialog.FileName;
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        update.Enabled = false;
+        try
+        {
+            SetStatus("جاري التحقق من التحديث الموقّع...");
+            var statusProgress = new Progress<string>(SetStatus);
+            await UpdateCoordinator.CheckDownloadAndInstallAsync(statusProgress);
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("تم إلغاء التحديث. النسخة الحالية لم تتغير.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus("تعذر إكمال التحديث الآمن.");
+            AppendLog("UPDATE ERROR: " + ex);
+            MessageBox.Show(this, ex.Message, "التحديث الآمن", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            update.Enabled = EnableSecureUpdates && !string.IsNullOrWhiteSpace(UpdateTrust.PublicKeyBase64);
+        }
     }
 
     private async Task ConvertAsync()
