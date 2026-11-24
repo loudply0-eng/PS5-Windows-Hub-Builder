@@ -64,7 +64,7 @@ After creating and signing the manifest, a maintainer with GitHub CLI access can
 ```sh
 bash tools/release-signing/publish-release.sh \
   0.1.1 \
-  "$(tr -d '\\r\\n' < ./PS5-Windows-Hub-Preview/BUILDER-COMMIT.txt)" \
+  "$(tr -d '\r\n' < ./PS5-Windows-Hub-Preview/BUILDER-COMMIT.txt)" \
   ./PS5-Windows-Hub-Preview \
   ./manifest.json \
   ./manifest.sig.base64 \
