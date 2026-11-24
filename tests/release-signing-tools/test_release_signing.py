@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import base64
 import json
 import subprocess
 import sys
@@ -66,6 +67,27 @@ def main():
         ])
         run(["openssl", "pkey", "-in", private_key, "-pubout", "-out", public_key])
 
+        public_der = subprocess.run(
+            ["openssl", "pkey", "-pubin", "-in", str(public_key), "-outform", "DER"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        ).stdout
+        public_key_b64 = base64.b64encode(public_der).decode("ascii")
+        public_key_b64_file = work / "public-key-spki-base64.txt"
+        public_key_b64_file.write_text(public_key_b64, encoding="ascii")
+        trust_source = work / "UpdateTrust.cs"
+        trust_source.write_text(
+            (ROOT / "app" / "PS5WindowsHub" / "UpdateTrust.cs").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        run([
+            sys.executable, TOOLS / "embed-public-key.py",
+            "--public-key-base64", public_key_b64_file,
+            "--source", trust_source,
+        ])
+        assert f'PublicKeyBase64 = "{public_key_b64}";' in trust_source.read_text(encoding="utf-8")
+
         with zipfile.ZipFile(asset, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("PS5-Windows-Hub.exe", b"test executable")
             archive.writestr("PS5-Windows-Hub.dll", b"test assembly")
@@ -120,6 +142,19 @@ def main():
         run(["openssl", "pkey", "-in", wrong_private, "-pubout", "-out", wrong_key])
         run(
             [sys.executable, TOOLS / "verify-manifest.py", manifest, asset, wrong_key, signature],
+            expect_success=False,
+        )
+
+        wrong_curve_private = work / "wrong-curve-private.pem"
+        wrong_curve_public = work / "wrong-curve-public.pem"
+        run([
+            "openssl", "genpkey", "-algorithm", "EC",
+            "-pkeyopt", "ec_paramgen_curve:secp384r1",
+            "-out", wrong_curve_private,
+        ])
+        run(["openssl", "pkey", "-in", wrong_curve_private, "-pubout", "-out", wrong_curve_public])
+        run(
+            [sys.executable, TOOLS / "verify-manifest.py", manifest, asset, wrong_curve_public, signature],
             expect_success=False,
         )
 
