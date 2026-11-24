@@ -156,6 +156,9 @@ ExpectArchiveRejected("ZIP file/directory collision rejected",
     ("node", 0, "file"), ("node/child.txt", 0, "child"));
 ExpectArchiveRejected("ZIP symbolic link rejected",
     ("link", unchecked((int)0xA0000000u), "target"));
+ExpectArchiveRejected("ZIP Windows device name rejected", ("CON.txt", 0, "x"));
+ExpectArchiveRejected("ZIP invalid Windows filename character rejected", ("bad?.txt", 0, "x"));
+ExpectArchiveRejected("ZIP trailing-dot filename rejected", ("badname.", 0, "x"));
 
 Console.WriteLine($"Security tests: {passed} passed, {failed} failed.");
 try { Directory.Delete(testRoot, recursive: true); } catch { }
