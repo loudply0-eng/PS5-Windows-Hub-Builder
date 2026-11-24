@@ -391,7 +391,6 @@ sealed class SequenceHandler : HttpMessageHandler
 sealed class FailingReadStream : Stream
 {
     private readonly byte[] _data;
-    private int _position;
     private bool _failed;
 
     internal FailingReadStream(byte[] data) => _data = data;
@@ -407,7 +406,6 @@ sealed class FailingReadStream : Stream
         _failed = true;
         var copied = Math.Min(count, _data.Length);
         Array.Copy(_data, 0, buffer, offset, copied);
-        _position += copied;
         return copied;
     }
     public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
