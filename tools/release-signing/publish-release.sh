@@ -12,6 +12,7 @@ DIST_DIR="$(cd "$3" && pwd)"
 MANIFEST="$(cd "$(dirname "$4")" && pwd)/$(basename "$4")"
 SIGNATURE="$(cd "$(dirname "$5")" && pwd)/$(basename "$5")"
 PUBLIC_KEY="$(cd "$(dirname "$6")" && pwd)/$(basename "$6")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTES="$(cd "$(dirname "$7")" && pwd)/$(basename "$7")"
 REPOSITORY="$8"
 TAG="v$VERSION"
@@ -28,16 +29,14 @@ for file in "$ASSET" "$SOURCE" "$LICENSE" "$MANIFEST" "$SIGNATURE" "$PUBLIC_KEY"
 done
 command -v gh >/dev/null 2>&1 || { echo "GitHub CLI is required." >&2; exit 1; }
 command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is required." >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "Python 3 is required." >&2; exit 1; }
 command -v openssl >/dev/null 2>&1 || { echo "OpenSSL is required." >&2; exit 1; }
 (
   cd "$DIST_DIR"
   sha256sum --check SHA256SUMS.txt
 )
 gh auth status --hostname github.com >/dev/null
-signature_der="$(mktemp)"
-trap 'rm -f "$signature_der"' EXIT
-base64 -d "$SIGNATURE" > "$signature_der"
-openssl dgst -sha256 -verify "$PUBLIC_KEY" -signature "$signature_der" "$MANIFEST"
+python3 "$SCRIPT_DIR/verify-manifest.py" "$MANIFEST" "$ASSET" "$PUBLIC_KEY" "$SIGNATURE"
 if gh api "repos/$REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
   echo "Git tag $TAG already exists. Refusing to publish against an unverified tag." >&2
   exit 1
