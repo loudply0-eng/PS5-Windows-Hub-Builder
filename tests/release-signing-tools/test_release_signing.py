@@ -91,8 +91,12 @@ def main():
         run(["bash", TOOLS / "sign-manifest.sh", private_key, manifest, signature])
         run([sys.executable, TOOLS / "verify-manifest.py", manifest, asset, public_key, signature])
 
-        tampered_asset = work / "tampered.zip"
-        tampered_asset.write_bytes(asset.read_bytes() + b"changed")
+        tampered_directory = work / "tampered"
+        tampered_directory.mkdir()
+        tampered_asset = tampered_directory / ASSET_NAME
+        changed_bytes = bytearray(asset.read_bytes())
+        changed_bytes[0] ^= 1
+        tampered_asset.write_bytes(changed_bytes)
         run(
             [sys.executable, TOOLS / "verify-manifest.py", manifest, tampered_asset, public_key, signature],
             expect_success=False,
