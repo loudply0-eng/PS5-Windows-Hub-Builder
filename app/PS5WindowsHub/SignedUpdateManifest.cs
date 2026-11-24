@@ -51,9 +51,10 @@ internal static class SignedUpdateManifest
             throw new CryptographicException("Signature or public key encoding is invalid.", ex);
         }
 
-        // P-256 IEEE-P1363 signatures are exactly 64 bytes.
-        if (signature.Length != 64)
-            throw new CryptographicException("ECDSA P-256 signature length is invalid.");
+        // OpenSSL's ECDSA output is the standard ASN.1 DER sequence (RFC 3279).
+        // Bound the encoded size before asking the crypto provider to parse it.
+        if (signature.Length is < 8 or > 80)
+            throw new CryptographicException("ECDSA P-256 DER signature length is invalid.");
 
         using var verifier = ECDsa.Create();
         try
@@ -68,7 +69,7 @@ internal static class SignedUpdateManifest
             throw;
         }
 
-        if (!verifier.VerifyData(manifestBytes, signature, HashAlgorithmName.SHA256))
+        if (!verifier.VerifyData(manifestBytes, signature, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence))
             throw new CryptographicException("Release manifest signature is invalid.");
 
         Manifest manifest;
