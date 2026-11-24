@@ -49,6 +49,11 @@ internal static class UpdateCoordinator
             ?? throw new InvalidOperationException("The installed application version is unavailable.");
         var manifest = SignedUpdateManifest.Verify(
             manifestBytes, signature, UpdateTrust.PublicKeyBase64, installedVersion);
+        if (string.Equals(manifest.Version, installedVersion, StringComparison.Ordinal))
+        {
+            status?.Report("The latest version is already installed.");
+            return;
+        }
 
         status?.Report("Downloading and verifying update package...");
         var archivePath = await VerifiedUpdateDownloader.DownloadAsync(manifest, downloadProgress, cancellationToken);
