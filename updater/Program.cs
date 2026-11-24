@@ -84,7 +84,14 @@ internal static class Program
             if (!RunHealthCheck(Path.Combine(installDirectory, ApplicationFileName)))
                 throw new InvalidOperationException("The new application failed its startup health check.");
 
-            // Keep the previous installation as a rollback copy until a later successful update.
+            // Retain the immediately previous installation as the rollback copy.
+            foreach (var oldBackup in Directory.EnumerateDirectories(parentDirectory, ".PS5WindowsHub-backup-*"))
+            {
+                if (string.Equals(oldBackup, backupDirectory, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                try { Directory.Delete(oldBackup, recursive: true); }
+                catch { /* Keep the new update successful; an older backup may be removed manually. */ }
+            }
         }
         catch
         {
