@@ -131,6 +131,17 @@ jobs:
           $helper = Join-Path $helperDir 'PS5WindowsHub.Updater.exe'
           Copy-Item 'updater-test-publish/PS5WindowsHub.Updater.exe' $helper
 
+          $productionHelper = 'app-publish/PS5WindowsHub.Updater.exe'
+          $productionHash = (Get-FileHash $productionHelper -Algorithm SHA256).Hash
+          $testHash = (Get-FileHash $helper -Algorithm SHA256).Hash
+          if ($productionHash -eq $testHash) { throw 'Test-only helper is byte-identical to production; the test-mode build was not isolated.' }
+
+          $userDataDirectory = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/UserData'
+          New-Item -ItemType Directory -Force -Path $userDataDirectory | Out-Null
+          $userDataSentinel = Join-Path $userDataDirectory 'ci-preservation-sentinel.txt'
+          $userDataSentinelContent = 'PS5 WINDOWS HUB USER DATA MUST SURVIVE UPDATES'
+          [System.IO.File]::WriteAllText($userDataSentinel, $userDataSentinelContent)
+
           $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
 
           $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
@@ -150,6 +161,7 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "Updater successful-install test failed with exit code $($p.ExitCode)." }
           if (-not (Test-Path (Join-Path $install 'PS5-Windows-Hub.exe'))) { throw 'Updated application executable is missing.' }
           if (-not (Get-ChildItem $env:RUNNER_TEMP -Directory -Filter $backupPattern)) { throw 'Previous-version backup was not retained.' }
+          if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Successful update changed or removed application user data.' }
 
           Copy-Item -Path 'app-publish/*' -Destination $badPayload -Recurse -Force
           Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $badPayload 'relinker.exe')
@@ -165,7 +177,8 @@ jobs:
           if ($p2.ExitCode -eq 0) { throw 'Updater accepted a corrupt application during rollback test.' }
           $afterRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
           if ($beforeRollback -ne $afterRollback) { throw 'Failed update did not restore the prior application.' }
-          Write-Host 'Updater transaction tests passed: successful swap and failed-update rollback.'
+          if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Failed update or rollback changed or removed application user data.' }
+          Write-Host 'Updater transaction tests passed: isolated production/test binaries, successful swap, rollback, and user-data preservation.'
 
       - name: Prepare binaries, corresponding source and checksums
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
