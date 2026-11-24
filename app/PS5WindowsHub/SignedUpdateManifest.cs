@@ -116,7 +116,7 @@ internal static class SignedUpdateManifest
         if (!IsStableVersion(manifest.Version, out var version) ||
             !IsStableVersion(manifest.MinimumSupportedVersion, out var minimum) ||
             !IsStableVersion(installedVersion, out var installed) ||
-            version < minimum || minimum > installed || version <= installed)
+            version < minimum || minimum > installed || version < installed)
             throw new CryptographicException("Manifest version constraints reject downgrade or unsupported installation.");
 
         if (manifest.SizeBytes is <= 0 or > 1L * 1024 * 1024 * 1024)
