@@ -12,10 +12,10 @@ internal static class Program
         var ownsMutex = false;
         try
         {
-            try { ownsMutex = updateMutex.WaitOne(0); }
+            try { ownsMutex = updateMutex.WaitOne(90_000); }
             catch (AbandonedMutexException) { ownsMutex = true; }
             if (!ownsMutex)
-                throw new InvalidOperationException("Another update transaction is already running.");
+                throw new TimeoutException("Another application or update transaction held the update mutex past the timeout.");
 
             var options = Parse(args);
             Apply(options.InstallDirectory, options.PayloadDirectory, options.ParentProcessId);
