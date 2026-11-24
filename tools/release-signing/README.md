@@ -16,7 +16,7 @@ The default key directory is:
 $HOME/.local/share/ps5-windows-hub-signing
 ```
 
-The private key is P-256 and stays on the phone. Do not copy it to GitHub, Oracle, GitHub Actions, this repository, or a public/shared folder. Keep a second backup only in encrypted offline storage. Do not regenerate the key after publishing unless a deliberate key-rotation process is implemented.
+The private key is P-256, encrypted with a passphrase, and stays on the phone. Choose a strong passphrase when OpenSSL prompts. Do not copy it to GitHub, Oracle, GitHub Actions, this repository, or a public/shared folder. Keep a second backup only in encrypted offline storage. Do not regenerate the key after publishing unless a deliberate key-rotation process is implemented.
 
 The generated `public-key-spki-base64.txt` is the public SubjectPublicKeyInfo value. It is safe to share and will be embedded in the Windows application after it is reviewed.
 
