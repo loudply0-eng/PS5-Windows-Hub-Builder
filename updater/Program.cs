@@ -153,8 +153,14 @@ internal static class Program
         }
     }
 
-    private static bool IsTestMode() =>
-        string.Equals(Environment.GetEnvironmentVariable("PS5_WINDOWS_HUB_UPDATER_TEST"), "1", StringComparison.Ordinal);
+    private static bool IsTestMode()
+    {
+#if UPDATER_TEST_MODE
+        return true;
+#else
+        return false;
+#endif
+    }
 
     private static void StartApplication(string installDirectory)
     {
