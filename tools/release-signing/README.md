@@ -45,7 +45,24 @@ bash tools/release-signing/sign-manifest.sh \
 
 The output is a base64-encoded ECDSA P-256/SHA-256 DER signature. The verifier checks the signature against the exact downloaded manifest bytes.
 
-## 3. Never publish private material
+## 3. Publish only public release files
+
+After reviewing the generated manifest and signature, a maintainer with GitHub CLI access can publish the versioned ZIP together with the matching upstream source and license:
+
+```sh
+bash tools/release-signing/publish-release.sh \
+  0.1.1 \
+  <target-commit-sha> \
+  ./PS5-Windows-Hub-Preview \
+  ./manifest.json \
+  ./manifest.sig.base64 \
+  ./release-notes.txt \
+  loudply0-eng/PS5-Windows-Hub-Builder
+```
+
+The script verifies the packaged SHA-256 list, refuses to overwrite an existing release, and uploads only public assets. It never reads the private key.
+
+## 4. Never publish private material
 
 Publish only:
 - `manifest.json`
