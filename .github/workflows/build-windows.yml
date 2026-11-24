@@ -108,9 +108,7 @@ jobs:
           $helper = Join-Path $helperDir 'PS5WindowsHub.Updater.exe'
           Copy-Item 'app-publish/PS5WindowsHub.Updater.exe' $helper
 
-          $dummy = [System.Diagnostics.Process]::Start($env:ComSpec, '/c exit 0')
-          $dummy.WaitForExit()
-          $parentPid = $dummy.Id
+          $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
 
           $psi = [System.Diagnostics.ProcessStartInfo]::new()
           $psi.FileName = $helper
