@@ -62,7 +62,7 @@ internal static class UpdateCoordinator
         try
         {
             status?.Report("Safely extracting verified update...");
-            SafeUpdateArchiveExtractor.Extract(archivePath, payloadDirectory);
+            SafeUpdateArchiveExtractor.Extract(archivePath, payloadDirectory, manifest.Sha256);
 
             foreach (var requiredFile in new[]
             {
