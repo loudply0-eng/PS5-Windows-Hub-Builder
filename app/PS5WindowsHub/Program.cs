@@ -1,3 +1,5 @@
+using System.Windows.Forms;
+
 namespace PS5WindowsHub;
 internal static class Program
 {
