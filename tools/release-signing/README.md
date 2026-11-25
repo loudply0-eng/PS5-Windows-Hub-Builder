@@ -51,7 +51,7 @@ After the versioned ZIP has been built and copied to the phone, create the manif
 ```sh
 python tools/release-signing/create-manifest.py \
   --version 0.1.1 \
-  --minimum-supported-version 0.1.0 \
+  --minimum-supported-version 0.1.1 \
   --asset PS5-Windows-Hub-0.1.1.zip \
   --asset-url https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v0.1.1/PS5-Windows-Hub-0.1.1.zip \
   --release-notes release-notes.txt \
