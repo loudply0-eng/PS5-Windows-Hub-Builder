@@ -16,6 +16,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Embed only the P-256 public update-verification key in the Windows app source.")
     parser.add_argument("--public-key-base64", required=True, type=Path)
     parser.add_argument("--source", default="app/PS5WindowsHub/UpdateTrust.cs", type=Path)
+    parser.add_argument("--replace-existing", action="store_true", help="Explicitly replace one existing valid P-256 public key; never used by the default production path.")
     args = parser.parse_args()
 
     try:
@@ -38,10 +39,22 @@ def main() -> int:
 
         source = args.source.read_text(encoding="utf-8")
         occurrences = source.count(PLACEHOLDER)
-        if occurrences != 1:
-            raise ValueError("Expected exactly one empty public-key placeholder; refusing to overwrite an existing key.")
-        replacement = f'internal const string PublicKeyBase64 = "{encoded}";'
-        updated = source.replace(PLACEHOLDER, replacement)
+        if occurrences == 1:
+            updated = source.replace(PLACEHOLDER, f'internal const string PublicKeyBase64 = "{encoded}";')
+        elif args.replace_existing:
+            matches = re.findall(r'internal const string PublicKeyBase64 = "([^"]+)";', source)
+            if len(matches) != 1:
+                raise ValueError("Expected exactly one existing public-key declaration.")
+            existing = base64.b64decode(matches[0], validate=True)
+            validate_p256_spki(existing)
+            updated = re.sub(
+                r'internal const string PublicKeyBase64 = "[^"]+";',
+                f'internal const string PublicKeyBase64 = "{encoded}";',
+                source,
+                count=1,
+            )
+        else:
+            raise ValueError("Expected exactly one empty public-key placeholder; use --replace-existing only for an intentional key rotation.")
         if updated == source:
             raise ValueError("The source public key was not changed.")
 
