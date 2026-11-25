@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build-windows:
     if: github.actor == 'loudply0-eng'
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64, ps5-windows-hub]
     timeout-minutes: 60
     defaults:
       run:
@@ -250,10 +250,10 @@ jobs:
           (cd dist && sha256sum --check SHA256SUMS.txt)
 
       - name: Upload Windows build artifact
-        if: github.actor == 'loudply0-eng'
+        if: github.event_name == 'workflow_dispatch' && github.actor == 'loudply0-eng'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: PS5-Windows-Hub-Preview
           path: dist/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
