@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PS5-Windows-Hub-Release-Signer</AssemblyName>
+    <RootNamespace>PS5WindowsHubReleaseSigner</RootNamespace>
+    <Product>PS5 WINDOWS HUB — OFFLINE RELEASE SIGNER</Product>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>
