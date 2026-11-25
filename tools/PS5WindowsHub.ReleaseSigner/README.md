@@ -14,7 +14,7 @@ The passphrase is used only in memory for the signing operation and the password
 
 ## First bootstrap release
 
-The first update-enabled application build is planned as version `0.1.1`, with minimum supported version `0.1.1`.
+The first update-enabled application build is planned as version `0.1.1`, with minimum supported version `0.1.0`.
 
 1. Download and extract the `PS5-Windows-Hub-Preview` workflow artifact.
 2. Use the ZIP named `PS5-Windows-Hub-0.1.1.zip` in this GUI.
