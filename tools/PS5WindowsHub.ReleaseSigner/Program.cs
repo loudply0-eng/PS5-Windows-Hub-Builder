@@ -31,7 +31,7 @@ internal sealed class SignerForm : Form
     private readonly TextBox passphrase = new() { UseSystemPasswordChar = true };
     private readonly TextBox assetPath = new() { ReadOnly = true };
     private readonly TextBox version = new() { Text = "0.1.1" };
-    private readonly TextBox minimumVersion = new() { Text = "0.1.1" };
+    private readonly TextBox minimumVersion = new() { Text = "0.1.0" };
     private readonly TextBox outputPath = new() { ReadOnly = true };
     private readonly TextBox releaseNotes = new()
     {
