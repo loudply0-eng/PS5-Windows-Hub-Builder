@@ -2,8 +2,8 @@ namespace PS5WindowsHub;
 
 internal static class UpdateTrust
 {
-    // Production P-256 SPKI public key is inserted only after the maintainer creates
-    // and safely backs up the matching private key on an offline device.
+    // P-256 SPKI trust anchor embedded in released clients. Change only during a deliberate
+    // key-rotation procedure that also provisions and verifies the matching offline private key.
     internal const string PublicKeyBase64 = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEijzMLeIFygR8rMMlITN1rfCHTncbjih/+N4uWikQG4y2v+XPS8iuh5w+STGLKG0zBw8oiZw2GwH7cyh/sdRajg==";
 
     internal static readonly Uri ManifestUri = new(
