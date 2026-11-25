@@ -95,15 +95,25 @@ internal sealed class SignerForm : Form
         layout.SetColumnSpan(heading, 3);
 
         keyPath.Text = GetDefaultPrivateKeyPath();
-        AddRow(layout, 1, "ملف المفتاح الخاص المشفر", keyPath, BrowseKey);
-        AddRow(layout, 2, "عبارة مرور المفتاح", passphrase);
-        AddRow(layout, 3, "حزمة التحديث ZIP", assetPath, BrowseAsset);
-        AddRow(layout, 4, "رقم الإصدار", version);
+        assetPath.Text = FindDefaultAssetPath();
+        if (!string.IsNullOrWhiteSpace(assetPath.Text))
+        {
+            var detectedVersion = Regex.Match(Path.GetFileName(assetPath.Text),
+                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.zip$");
+            if (detectedVersion.Success)
+                version.Text = $"{detectedVersion.Groups[1].Value}.{detectedVersion.Groups[2].Value}.{detectedVersion.Groups[3].Value}";
+        }
+        version.ReadOnly = true;
+        minimumVersion.ReadOnly = true;
+        outputPath.Text = !string.IsNullOrWhiteSpace(assetPath.Text)
+            ? Path.Combine(Path.GetDirectoryName(assetPath.Text)!, "PS5WindowsHub-SignedRelease")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "PS5WindowsHub-SignedRelease");
+        AddRow(layout, 1, "المفتاح الخاص (يُكتشف تلقائياً)", keyPath, BrowseKey);
+        AddRow(layout, 2, "كلمة مرور المفتاح", passphrase);
+        AddRow(layout, 3, "حزمة الإصدار المكتشفة", assetPath);
+        AddRow(layout, 4, "الإصدار المكتشف", version);
         AddRow(layout, 5, "أقل إصدار مدعوم", minimumVersion);
-        outputPath.Text = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-            "PS5WindowsHub-SignedRelease");
-        AddRow(layout, 6, "مجلد ملفات التوقيع", outputPath, BrowseOutput);
+        AddRow(layout, 6, "مكان حفظ التوقيع تلقائياً", outputPath);
 
         var notesLabel = new Label
         {
@@ -146,6 +156,27 @@ internal sealed class SignerForm : Form
         status.Text = "المفتاح الخاص يبقى على هذا الجهاز. لا يوجد اتصال بالشبكة أو رفع للمفتاح.";
         layout.Controls.Add(status, 0, 9);
         layout.SetColumnSpan(status, 3);
+    }
+
+    private static string FindDefaultAssetPath()
+    {
+        var candidates = new[]
+        {
+            AppContext.BaseDirectory,
+            Directory.GetParent(AppContext.BaseDirectory)?.FullName ?? "",
+            Directory.GetParent(Directory.GetParent(AppContext.BaseDirectory)?.FullName ?? "")?.FullName ?? "",
+            Environment.CurrentDirectory
+        }.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var directory in candidates)
+        {
+            var matches = Directory.GetFiles(directory, "PS5-Windows-Hub-*.zip", SearchOption.TopDirectoryOnly)
+                .Where(file => Regex.IsMatch(Path.GetFileName(file),
+                    @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.zip$"))
+                .ToArray();
+            if (matches.Length == 1) return matches[0];
+        }
+        return "";
     }
 
     private static string GetDefaultPrivateKeyPath()
@@ -252,7 +283,7 @@ internal sealed class SignerForm : Form
             var zipPath = Path.GetFullPath(assetPath.Text.Trim());
             var destination = Path.GetFullPath(outputPath.Text.Trim());
             if (!File.Exists(privatePath)) throw new FileNotFoundException("لم يتم العثور على المفتاح الخاص المشفر.");
-            if (!File.Exists(zipPath)) throw new FileNotFoundException("اختر ملف ZIP صالحاً.");
+            if (!File.Exists(zipPath)) throw new FileNotFoundException("لم أجد حزمة الإصدار بجانب الأداة. ضع الأداة وملف ZIP في مجلد واحد ثم أعد التشغيل.");
             if (password.Length == 0) throw new InvalidDataException("أدخل عبارة مرور المفتاح محلياً.");
 
             var expectedAssetName = $"PS5-Windows-Hub-{releaseVersion}.zip";
