@@ -13,6 +13,12 @@ Windows build and packaging repository for **PS5 WINDOWS HUB**.
 
 The workflow runs relinker tests, updater security tests, offline signing-tool tests, and updater install/rollback integration tests. The latest checked run (#159) completed successfully.
 
+## Build runner and Actions cost
+
+The Windows workflow now targets the repository-scoped self-hosted Windows x64 runner labelled `ps5-windows-hub`. This avoids GitHub-hosted compute-minute charges. The runner PC supplies the CPU and build environment; GitHub artifact storage is still subject to the account's allowance.
+
+Build artifacts are uploaded only for a manual owner-triggered workflow run and retained for one day. See [the self-hosted runner setup guide](docs/SELF_HOSTED_RUNNER_SETUP.md) before expecting a queued build to start.
+
 ## Secure updates — implementation present, public release pending
 
 The WinForms app currently has secure update checks enabled. It contains an ECDSA P-256 public trust anchor and checks signed release metadata after startup and every six hours. The update path verifies the signature, manifest, approved release asset URL, file size, and SHA-256 before staging the update through a separate helper. The helper has install health checks, backup, rollback, and user-data preservation logic.
