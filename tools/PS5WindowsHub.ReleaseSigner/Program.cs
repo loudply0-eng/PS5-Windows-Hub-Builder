@@ -246,7 +246,7 @@ internal sealed class SignerForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             var detectedVersion = Regex.Match(Path.GetFileName(dialog.FileName),
-                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.zip$");
+                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.]zip$");
             if (!detectedVersion.Success)
             {
                 MessageBox.Show(this, "اسم الحزمة يجب أن يكون PS5-Windows-Hub-X.Y.Z.zip.", "حزمة غير صالحة",
