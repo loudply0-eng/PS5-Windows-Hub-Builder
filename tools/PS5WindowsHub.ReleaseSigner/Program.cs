@@ -99,7 +99,7 @@ internal sealed class SignerForm : Form
         if (!string.IsNullOrWhiteSpace(assetPath.Text))
         {
             var detectedVersion = Regex.Match(Path.GetFileName(assetPath.Text),
-                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.zip$");
+                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.zip$");
             if (detectedVersion.Success)
                 version.Text = $"{detectedVersion.Groups[1].Value}.{detectedVersion.Groups[2].Value}.{detectedVersion.Groups[3].Value}";
         }
@@ -172,7 +172,7 @@ internal sealed class SignerForm : Form
         {
             var matches = Directory.GetFiles(directory, "PS5-Windows-Hub-*.zip", SearchOption.TopDirectoryOnly)
                 .Where(file => Regex.IsMatch(Path.GetFileName(file),
-                    @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.zip$"))
+                    @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.zip$"))
                 .ToArray();
             if (matches.Length == 1) return matches[0];
         }
