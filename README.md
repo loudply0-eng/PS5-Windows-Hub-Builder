@@ -1,38 +1,46 @@
 # PS5 Windows Hub — Builder
 
-Public Windows CI and packaging repository for **PS5 WINDOWS HUB**.
+Windows build and packaging repository for **PS5 WINDOWS HUB**.
 
-## Current workflow
+## Current build
 
-`.github/workflows/build-windows.yml` builds the upstream AnyPS5 **relinker-only** target for Windows and publishes the self-contained .NET 8 WinForms shell.
+`.github/workflows/build-windows.yml` builds:
 
-- Triggers: manual `workflow_dispatch` and owner-authored pull requests targeting `main`
-- Runner: GitHub-hosted Windows runner
-- Toolchain: MSYS2 UCRT64 / MinGW-w64
-- Upstream source: AnyPS5 v0.1.5 pinned to commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`
-- Tests: upstream relinker CTest, updater manifest/archive security harness, and updater directory-swap/rollback integration tests
-- Package: self-contained Windows x64 app, relinker, separate updater helper, versioned update-payload ZIP, matching upstream source and license, SHA-256 checksums
-- Artifact retention: 14 days; artifact upload and packaging are limited to manual workflow dispatch
+- A self-contained .NET 8 WinForms desktop shell for Windows x64.
+- The upstream AnyPS5 v0.1.5 **relinker-only** executable, pinned to commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`.
+- A separate self-contained updater helper and an offline Windows release-signing GUI.
+- Matching upstream source and GPL-2.0-only license notices, plus SHA-256 checksums.
 
-Only the GitHub account `loudply0-eng` can run the job. The workflow has read-only repository permissions and uses no secrets or private-repository token.
+The workflow runs relinker tests, updater security tests, offline signing-tool tests, and updater install/rollback integration tests. The latest checked run (#159) completed successfully.
 
-## Important limitation
+## Secure updates — implementation present, public release pending
 
-The updater is **not enabled yet**. The manifest verifier, verified downloader, bounded ZIP extractor, external updater helper, rollback path, and offline signing scripts are partial foundations. The in-app update coordinator and helper handoff are implemented but disabled. There is no production signing key or embedded public key and no official signed release. The update button remains disabled until the complete flow and all tests pass.
+The WinForms app currently has secure update checks enabled. It contains an ECDSA P-256 public trust anchor and checks signed release metadata after startup and every six hours. The update path verifies the signature, manifest, approved release asset URL, file size, and SHA-256 before staging the update through a separate helper. The helper has install health checks, backup, rollback, and user-data preservation logic.
 
-AnyPS5 is a **relinker**, not a complete PS5 emulator or complete game runtime. A successful relink does not mean a PS5 game will run; required system PRX libraries and per-game compatibility are separate work.
+The offline signer is packaged separately under `ReleaseSigner/`. It uses the existing encrypted private key locally, verifies that its public key matches the app's embedded trust anchor, and creates `manifest.json` plus `manifest.sig.base64`. The private key and passphrase must remain on the maintainer's own device; neither belongs in GitHub or in ChatGPT.
+
+**No official signed GitHub Release has been published yet.** CI success verifies the build and test harness, not the complete live update path. The first stable release must be signed locally and published with the exact versioned update ZIP, `manifest.json`, `manifest.sig.base64`, matching upstream source, and license. A real installed-client update test is still required.
+
+**Distribution constraint:** this Builder repository is currently private. Anonymous installations cannot download its private release assets or metadata. Before public distribution or in-app updates for other users, either this repository must be deliberately made public or the release metadata/assets must be hosted at a separate public endpoint and the app's pinned URLs updated. Do not expose the private Core repository or any private signing material.
+
+The ECDSA signature authenticates update metadata; it is **not** a Windows Authenticode publisher signature. Without an Authenticode certificate, Windows may still display an unknown-publisher/SmartScreen warning.
+
+## Engine limitation
+
+AnyPS5 is a **relinker**, not a complete PS5 emulator or complete game runtime. A successful ELF relink does not mean a PS5 game will run; required system PRX libraries and per-game compatibility are separate work.
 
 ## Upstream and license
 
-- https://github.com/boykopovar/AnyPS5
-- Upstream license: GPL-2.0-only
+- Upstream: https://github.com/boykopovar/AnyPS5
+- Version: AnyPS5 v0.1.5, pinned commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`
+- License: GPL-2.0-only
 
-Every distributed build derived from AnyPS5 must meet the GPL-2.0-only source and notice requirements. Matching upstream source and license files are packaged with the build.
+Every distributed build derived from AnyPS5 must meet the GPL-2.0-only source and notice requirements. The matching upstream source archive and license are packaged with the build.
 
 ## Security
 
-- Core repository remains private; no private Core checkout is used here.
-- No private signing keys, game files, firmware or console keys belong in this repository.
-- Third-party actions are pinned to full commit SHAs.
-- Actions permissions remain read-only.
-- Do not add pull-request workflows that execute untrusted code with secrets.
+- Core remains private; this Builder repository contains no private Core checkout.
+- Never commit private signing keys, passphrases, game files, firmware, or console keys.
+- Third-party GitHub Actions are pinned to full commit SHAs.
+- Workflow repository permissions remain read-only.
+- Do not run untrusted pull-request code with secrets.
