@@ -22,7 +22,7 @@ internal static class Program
 internal sealed class SignerForm : Form
 {
     private const string ExpectedPublicKeyBase64 =
-        "MFkwEwYHKoZIzj0DAQcDQgAEijzMLeIFygR8rMMlITN1rfCHTncbjih/+N4uWikQG4y2v+XPS8iuh5w+STGLKG0zBw8oiZw2GwH7cyh/sdRajg==";
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEijzMLeIFygR8rMMlITN1rfCHTncbjih/+N4uWikQG4y2v+XPS8iuh5w+STGLKG0zBw8oiZw2GwH7cyh/sdRajg==";
     private const string ExpectedFingerprint =
         "773d9d46e3f8904cacdf4b4bcf0ac415db529c2dc11d1b827cc3ca1edb2bca6d";
 
@@ -333,7 +333,7 @@ internal sealed class SignerForm : Form
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or CryptographicException or ArgumentException or FormatException)
+        catch (Exception ex)
         {
             status.Text = "تعذر إنشاء التوقيع. راجع الحقول ومسار المفتاح.";
             var message = ex is CryptographicException
@@ -353,7 +353,9 @@ internal sealed class SignerForm : Form
         parsed = new Version(0, 0, 0);
         if (!Regex.IsMatch(value, @"\A(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant))
             return false;
-        return Version.TryParse(value, out parsed!);
+        if (!Version.TryParse(value, out var valueParsed) || valueParsed is null) return false;
+        parsed = valueParsed;
+        return true;
     }
 
     private static void AtomicWrite(string targetPath, byte[] bytes)
