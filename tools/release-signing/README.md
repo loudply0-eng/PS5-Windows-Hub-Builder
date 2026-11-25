@@ -31,18 +31,18 @@ python tools/release-signing/embed-public-key.py \
 
 The script validates that the key is ECDSA P-256 and updates only the empty public-key placeholder in `app/PS5WindowsHub/UpdateTrust.cs`. Review that one source change, commit it to the Builder branch, and rebuild. The private key is never opened by this script.
 
-## 3. Prepare the update-enabled release build
+## 3. First bootstrap release
 
-Do not enable the update button while the production key or signed release is missing. Only after the final security tests, a real signed-release smoke test, and rollback tests pass:
+The current update-enabled candidate is version `0.1.1`. The first signed manifest must set:
 
-1. Set `Version` in `app/PS5WindowsHub/PS5WindowsHub.csproj` to the new three-part release version. For the documented example, this is `0.1.1`; the current preview line is `0.1.0`.
-2. Change `EnableSecureUpdates` in `app/PS5WindowsHub/MainForm.cs` to `true`.
-3. Commit these changes together with the embedded public key.
-4. Run the Windows workflow manually for that exact commit and download its `PS5-Windows-Hub-Preview` artifact.
+- `version`: `0.1.1`
+- `minimum_supported_version`: `0.1.0`
 
-The release publishing script refuses to publish unless the target commit contains the same embedded P-256 public key and explicitly enables the update button. Keep the UI disabled until those conditions and all end-to-end tests are satisfied.
+The minimum must remain `0.1.0` so the existing preview can accept the first update. Setting it to `0.1.1` would cause version `0.1.0` to reject the manifest before it can download the update.
 
+The candidate source already embeds the P-256 public trust key and enables `EnableSecureUpdates`. Its Windows build and updater transaction tests passed in CI. Do not publish until the exact release ZIP has been signed with the corresponding offline private key and a real signed-release smoke test is completed.
 
+The offline Windows signer GUI is built from `tools/PS5WindowsHub.ReleaseSigner`. It verifies that the selected encrypted private key matches the public trust anchor embedded in the app, computes the ZIP SHA-256, and creates `manifest.json` and `manifest.sig.base64` locally. It has no network publishing function and never uploads the private key.
 
 ## 4. Create and sign exact manifest bytes
 
