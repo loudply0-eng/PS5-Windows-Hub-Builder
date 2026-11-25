@@ -22,9 +22,9 @@ using var trustedKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 using var wrongKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 var publicKey = Convert.ToBase64String(trustedKey.ExportSubjectPublicKeyInfo());
 
-byte[] BuildManifest(string version = "1.1.0", string url = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip", string extra = "", string assetName = "PS5-Windows-Hub-1.1.0.zip")
+byte[] BuildManifest(string version = "1.1.0", string minimumSupportedVersion = "1.0.0", string url = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v1.1.0/PS5-Windows-Hub-1.1.0.zip", string extra = "", string assetName = "PS5-Windows-Hub-1.1.0.zip")
 {
-    var json = "{\"version\":\"" + version + "\",\"minimum_supported_version\":\"1.0.0\",\"asset_name\":\"" + assetName + "\",\"asset_url\":\"" + url + "\",\"size_bytes\":1024,\"sha256\":\"" + new string('a', 64) + "\",\"release_notes\":\"Security test\"" + extra + "}";
+    var json = "{\"version\":\"" + version + "\",\"minimum_supported_version\":\"" + minimumSupportedVersion + "\",\"asset_name\":\"" + assetName + "\",\"asset_url\":\"" + url + "\",\"size_bytes\":1024,\"sha256\":\"" + new string('a', 64) + "\",\"release_notes\":\"Security test\"" + extra + "}";
     return Encoding.UTF8.GetBytes(json);
 }
 
@@ -74,6 +74,18 @@ Check("valid OpenSSL-compatible P-256 DER signature accepted", () =>
     var bytes = BuildManifest();
     var result = SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "1.0.0");
     if (result.Version != "1.1.0") throw new Exception("Wrong version returned.");
+});
+
+Check("0.1.0 bootstrap client accepts signed 0.1.1 update", () =>
+{
+    var bytes = BuildManifest(
+        version: "0.1.1",
+        minimumSupportedVersion: "0.1.0",
+        url: "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v0.1.1/PS5-Windows-Hub-0.1.1.zip",
+        assetName: "PS5-Windows-Hub-0.1.1.zip");
+    var result = SignedUpdateManifest.Verify(bytes, Sign(bytes), publicKey, "0.1.0");
+    if (result.Version != "0.1.1" || result.MinimumSupportedVersion != "0.1.0")
+        throw new Exception("The first bootstrap manifest was not accepted for the 0.1.0 client.");
 });
 
 Check("signed manifest for current version reports no update", () =>
