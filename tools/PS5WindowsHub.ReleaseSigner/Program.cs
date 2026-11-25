@@ -110,10 +110,10 @@ internal sealed class SignerForm : Form
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "PS5WindowsHub-SignedRelease");
         AddRow(layout, 1, "المفتاح الخاص (يُكتشف تلقائياً)", keyPath, BrowseKey);
         AddRow(layout, 2, "كلمة مرور المفتاح", passphrase);
-        AddRow(layout, 3, "حزمة الإصدار المكتشفة", assetPath);
+        AddRow(layout, 3, "حزمة الإصدار المكتشفة", assetPath, BrowseAsset);
         AddRow(layout, 4, "الإصدار المكتشف", version);
         AddRow(layout, 5, "أقل إصدار مدعوم", minimumVersion);
-        AddRow(layout, 6, "مكان حفظ التوقيع تلقائياً", outputPath);
+        AddRow(layout, 6, "مكان حفظ التوقيع تلقائياً", outputPath, BrowseOutput);
 
         var notesLabel = new Label
         {
@@ -245,9 +245,19 @@ internal sealed class SignerForm : Form
         };
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
+            var detectedVersion = Regex.Match(Path.GetFileName(dialog.FileName),
+                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.zip$");
+            if (!detectedVersion.Success)
+            {
+                MessageBox.Show(this, "اسم الحزمة يجب أن يكون PS5-Windows-Hub-X.Y.Z.zip.", "حزمة غير صالحة",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             assetPath.Text = dialog.FileName;
+            version.Text = $"{detectedVersion.Groups[1].Value}.{detectedVersion.Groups[2].Value}.{detectedVersion.Groups[3].Value}";
             if (string.IsNullOrWhiteSpace(outputPath.Text))
-                outputPath.Text = Path.GetDirectoryName(dialog.FileName) ?? "";
+                outputPath.Text = Path.Combine(Path.GetDirectoryName(dialog.FileName)!, "PS5WindowsHub-SignedRelease");
         }
     }
 
