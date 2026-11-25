@@ -99,6 +99,7 @@ def main():
             sys.executable, TOOLS / "embed-public-key.py",
             "--public-key-base64", public_key_b64_file,
             "--source", trust_source,
+            "--replace-existing",
         ])
         assert f'PublicKeyBase64 = "{public_key_b64}";' in trust_source.read_text(encoding="utf-8")
 
