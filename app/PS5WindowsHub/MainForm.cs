@@ -73,6 +73,14 @@ internal sealed class MainForm : Form
             + "تنبيه: بناء relinker وحده لا يوفر جميع مكتبات النظام اللازمة لتشغيل الألعاب.\r\n";
         root.Controls.Add(log, 0, 5);
         SetStatus("جاهز — اختر ملف ELF للبدء.");
+
+        // When secure updates are enabled for a signed stable release, check automatically after the main window is shown.
+        Shown += async (_, _) =>
+        {
+            if (!EnableSecureUpdates) return;
+            await Task.Delay(1200);
+            if (!IsDisposed) await CheckForUpdatesAsync();
+        };
     }
 
     private Control PathRow(string caption, TextBox box, Button button, EventHandler handler)
