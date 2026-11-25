@@ -79,7 +79,7 @@ internal sealed class MainForm : Form
         {
             if (!EnableSecureUpdates) return;
             await Task.Delay(1200);
-            if (!IsDisposed) await CheckForUpdatesAsync();
+            if (!IsDisposed) await CheckForUpdatesAsync(automatic: true);
         };
     }
 
@@ -139,7 +139,7 @@ internal sealed class MainForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK) output.Text = dialog.FileName;
     }
 
-    private async Task CheckForUpdatesAsync()
+    private async Task CheckForUpdatesAsync(bool automatic = false)
     {
         update.Enabled = false;
         try
@@ -156,7 +156,8 @@ internal sealed class MainForm : Form
         {
             SetStatus("تعذر إكمال التحديث الآمن.");
             AppendLog("UPDATE ERROR: " + ex);
-            MessageBox.Show(this, ex.Message, "التحديث الآمن", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (!automatic)
+                MessageBox.Show(this, ex.Message, "التحديث الآمن", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
