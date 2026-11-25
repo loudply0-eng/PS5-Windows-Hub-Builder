@@ -13,6 +13,9 @@ internal sealed class MainForm : Form
     private readonly Button update = new();
     private readonly Label status = new();
     private readonly RichTextBox log = new();
+    private readonly System.Windows.Forms.Timer automaticUpdateTimer = new() { Interval = 6 * 60 * 60 * 1000 };
+    private bool conversionInProgress;
+    private int updateCheckInProgress;
     private const bool EnableSecureUpdates = false; // Do not change until release signing and end-to-end update tests are complete.
     private string Engine => Path.Combine(AppContext.BaseDirectory, "relinker.exe");
 
@@ -78,9 +81,15 @@ internal sealed class MainForm : Form
         Shown += async (_, _) =>
         {
             if (!EnableSecureUpdates) return;
+            automaticUpdateTimer.Tick += async (_, _) =>
+            {
+                if (!IsDisposed) await CheckForUpdatesAsync(automatic: true);
+            };
+            automaticUpdateTimer.Start();
             await Task.Delay(1200);
             if (!IsDisposed) await CheckForUpdatesAsync(automatic: true);
         };
+        FormClosed += (_, _) => automaticUpdateTimer.Stop();
     }
 
     private Control PathRow(string caption, TextBox box, Button button, EventHandler handler)
@@ -141,12 +150,13 @@ internal sealed class MainForm : Form
 
     private async Task CheckForUpdatesAsync(bool automatic = false)
     {
+        if (Interlocked.Exchange(ref updateCheckInProgress, 1) != 0) return;
         update.Enabled = false;
         try
         {
             SetStatus("جاري التحقق من التحديث الموقّع...");
             var statusProgress = new Progress<string>(SetStatus);
-            await UpdateCoordinator.CheckDownloadAndInstallAsync(statusProgress);
+            await UpdateCoordinator.CheckDownloadAndInstallAsync(statusProgress, canInstall: () => !conversionInProgress);
         }
         catch (OperationCanceledException)
         {
@@ -161,6 +171,7 @@ internal sealed class MainForm : Form
         }
         finally
         {
+            Interlocked.Exchange(ref updateCheckInProgress, 0);
             update.Enabled = EnableSecureUpdates && !string.IsNullOrWhiteSpace(UpdateTrust.PublicKeyBase64);
         }
     }
@@ -192,6 +203,7 @@ internal sealed class MainForm : Form
         }
 
         convert.Enabled = browseInput.Enabled = browseOutput.Enabled = false;
+        conversionInProgress = true;
         log.Clear();
         AppendLog("Starting AnyPS5 relinker conversion...");
         SetStatus("جاري التحويل — لا تغلق البرنامج.");
@@ -236,6 +248,7 @@ internal sealed class MainForm : Form
         }
         finally
         {
+            conversionInProgress = false;
             convert.Enabled = browseInput.Enabled = browseOutput.Enabled = true;
         }
     }
