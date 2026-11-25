@@ -13,7 +13,7 @@ The workflow requires all of these labels:
 
 Register the runner from **Builder → Settings → Actions → Runners → New self-hosted runner → Windows → x64**. Use the current download and configuration commands displayed by GitHub. Runner registration tokens are temporary; generate one immediately before setup and never commit or send it in chat.
 
-Run the runner as a Windows service so it returns after a reboot. Give the runner folder a dedicated path such as `C:\\actions-runner`. Do not install it in the application or source checkout directory.
+Run the runner as a Windows service so it returns after a reboot. Give the runner folder a dedicated path such as `C:\actions-runner`. Do not install it in the application or source checkout directory.
 
 ## Required PC software
 
