@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -235,7 +236,7 @@ internal sealed class SignerForm : Form
     {
         signButton.Enabled = false;
         status.Text = "جاري فحص المفتاح والحزمة وتوقيع بيانات الإصدار محلياً...";
-        var password = passphrase.Text;
+        var password = passphrase.Text.ToCharArray();
         passphrase.Clear();
 
         try
@@ -252,7 +253,7 @@ internal sealed class SignerForm : Form
             var destination = Path.GetFullPath(outputPath.Text.Trim());
             if (!File.Exists(privatePath)) throw new FileNotFoundException("لم يتم العثور على المفتاح الخاص المشفر.");
             if (!File.Exists(zipPath)) throw new FileNotFoundException("اختر ملف ZIP صالحاً.");
-            if (string.IsNullOrWhiteSpace(password)) throw new InvalidDataException("أدخل عبارة مرور المفتاح محلياً.");
+            if (password.Length == 0) throw new InvalidDataException("أدخل عبارة مرور المفتاح محلياً.");
 
             var expectedAssetName = $"PS5-Windows-Hub-{releaseVersion}.zip";
             if (!string.Equals(Path.GetFileName(zipPath), expectedAssetName, StringComparison.Ordinal))
@@ -336,13 +337,11 @@ internal sealed class SignerForm : Form
         catch (Exception ex)
         {
             status.Text = "تعذر إنشاء التوقيع. راجع الحقول ومسار المفتاح.";
-            var message = ex is CryptographicException
-                ? ex.Message
-                : ex.Message;
-            MessageBox.Show(this, message, "تعذر توقيع الإصدار", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, ex.Message, "تعذر توقيع الإصدار", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
+            CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(password.AsSpan()));
             passphrase.Clear();
             signButton.Enabled = true;
         }
