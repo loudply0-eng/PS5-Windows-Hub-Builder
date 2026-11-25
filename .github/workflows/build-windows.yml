@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build-windows:
-    if: github.actor == 'loudply0-eng'
+    if: github.actor == 'loudply0-eng' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Windows, X64, ps5-windows-hub]
     timeout-minutes: 60
     defaults:
