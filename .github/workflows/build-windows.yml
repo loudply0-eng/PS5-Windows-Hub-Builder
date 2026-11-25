@@ -211,7 +211,7 @@ jobs:
           printf '%s\n' "$actual_commit" > dist/BUILDER-COMMIT.txt
           printf '%s\n' \
             'PS5 Windows Hub - desktop shell and relinker preview' \
-            'App: self-contained .NET 8 WinForms front end; standalone updater helper included; automatic updates are not enabled yet' \
+            'App: self-contained .NET 8 WinForms front end; signed automatic updates enabled; dedicated updater helper included' \
             'Engine scope: AnyPS5 relinker-only (not the complete game runtime)' \
             'Upstream: https://github.com/boykopovar/AnyPS5' \
             'Upstream tag: v0.1.5' \
