@@ -30,7 +30,8 @@ internal static class UpdateCoordinator
     internal static async Task CheckDownloadAndInstallAsync(
         IProgress<string>? status = null,
         IProgress<long>? downloadProgress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<bool>? canInstall = null)
     {
         if (string.IsNullOrWhiteSpace(UpdateTrust.PublicKeyBase64))
             throw new CryptographicException("The production update public key has not been provisioned.");
@@ -80,6 +81,20 @@ internal static class UpdateCoordinator
             var stagedVersion = stagedAssembly.Version?.ToString(3);
             if (!string.Equals(stagedVersion, manifest.Version, StringComparison.Ordinal))
                 throw new CryptographicException("The application assembly version does not match the signed manifest version.");
+
+            if (canInstall is not null)
+            {
+                var waitingForIdle = false;
+                while (!canInstall())
+                {
+                    if (!waitingForIdle)
+                    {
+                        status?.Report("Update is ready; it will install automatically when the current conversion finishes...");
+                        waitingForIdle = true;
+                    }
+                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                }
+            }
 
             File.Delete(archivePath);
             status?.Report("Starting the verified updater and closing the application...");
