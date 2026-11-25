@@ -16,7 +16,7 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer automaticUpdateTimer = new() { Interval = 6 * 60 * 60 * 1000 };
     private bool conversionInProgress;
     private int updateCheckInProgress;
-    private const bool EnableSecureUpdates = false; // Do not change until release signing and end-to-end update tests are complete.
+    private const bool EnableSecureUpdates = true; // Do not change until release signing and end-to-end update tests are complete.
     private string Engine => Path.Combine(AppContext.BaseDirectory, "relinker.exe");
 
     public MainForm()
