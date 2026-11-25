@@ -1,102 +1,48 @@
-# Offline release signing
+# PS5 Windows Hub — Offline Release Signing
 
-These scripts are intended to run locally on the maintainer's phone (for example, in Termux) or another offline device. They never upload keys.
+## Production signing key
 
-## 1. Generate the key once
+The repository already contains the production ECDSA P-256 **public** trust anchor in `app/PS5WindowsHub/UpdateTrust.cs`. The matching encrypted private key is kept only on the maintainer's Windows PC:
 
-On Termux, install the local tools with `pkg install openssl python`, then run:
+`%LOCALAPPDATA%\PS5WindowsHub\SigningKeys\ecdsa-p256-private-encrypted.pem`
 
-```sh
-bash tools/release-signing/generate-key.sh
-```
+Do not run `generate-key.sh`, regenerate this key, replace the embedded public key, or upload the private key to GitHub, GitHub Actions, Oracle, this repository, or any artifact. A different key would not match the trust anchor already embedded in the application.
 
-The default key directory is:
+## First bootstrap release
 
-```
-$HOME/.local/share/ps5-windows-hub-signing
-```
-
-The private key is P-256, encrypted with a passphrase, and stays on the phone. Choose a strong passphrase when OpenSSL prompts. Do not copy it to GitHub, Oracle, GitHub Actions, this repository, or a public/shared folder. Keep a second backup only in encrypted offline storage. Do not regenerate the key after publishing unless a deliberate key-rotation process is implemented.
-
-The generated `public-key-spki-base64.txt` is the public SubjectPublicKeyInfo value. It is safe to share and will be embedded in the Windows application after it is reviewed.
-
-## 2. Embed only the public key
-
-After cloning the Builder repository on the phone, copy or point the script at the generated public-key file:
-
-```sh
-python tools/release-signing/embed-public-key.py \
-  --public-key-base64 "$HOME/.local/share/ps5-windows-hub-signing/public-key-spki-base64.txt"
-```
-
-The script validates that the key is ECDSA P-256 and updates only the empty public-key placeholder in `app/PS5WindowsHub/UpdateTrust.cs`. Review that one source change, commit it to the Builder branch, and rebuild. The private key is never opened by this script.
-
-## 3. First bootstrap release
-
-The current update-enabled candidate is version `0.1.1`. The first signed manifest must set:
+The update-enabled candidate is version `0.1.1`. The first manifest must use:
 
 - `version`: `0.1.1`
 - `minimum_supported_version`: `0.1.0`
 
-The minimum must remain `0.1.0` so the existing preview can accept the first update. Setting it to `0.1.1` would cause version `0.1.0` to reject the manifest before it can download the update.
+The minimum must remain `0.1.0` so an existing `0.1.0` preview can accept the first update. Setting it to `0.1.1` would cause the old app to reject the manifest before downloading it.
 
-The candidate source already embeds the P-256 public trust key and enables `EnableSecureUpdates`. Its Windows build and updater transaction tests passed in CI. Do not publish until the exact release ZIP has been signed with the corresponding offline private key and a real signed-release smoke test is completed.
+## Sign with the Windows GUI
 
-The offline Windows signer GUI is built from `tools/PS5WindowsHub.ReleaseSigner`. It verifies that the selected encrypted private key matches the public trust anchor embedded in the app, computes the ZIP SHA-256, and creates `manifest.json` and `manifest.sig.base64` locally. It has no network publishing function and never uploads the private key.
+Use the standalone `PS5-Windows-Hub-Release-Signer.exe` from the successful Windows workflow artifact. It works offline and has no release-upload function.
 
-## 4. Create and sign exact manifest bytes
+1. Select the encrypted key at the path above.
+2. Select the exact `PS5-Windows-Hub-0.1.1.zip` built by CI.
+3. Set version to `0.1.1` and minimum supported version to `0.1.0`.
+4. Enter the key passphrase locally and create the signature files.
+5. The signer verifies that the private key matches the embedded P-256 public key, calculates the ZIP size and SHA-256, creates `manifest.json` and `manifest.sig.base64`, and verifies the signature locally.
 
-After the versioned ZIP has been built and copied to the phone, create the manifest locally. The asset URL is the planned GitHub Release URL and must match the exact release tag and ZIP filename; the ZIP does not need to be uploaded yet:
+The passphrase is cleared from the input and its character buffer is zeroed after signing. The GUI does not upload or transmit the private key.
 
-```sh
-python tools/release-signing/create-manifest.py \
-  --version 0.1.1 \
-  --minimum-supported-version 0.1.0 \
-  --asset PS5-Windows-Hub-0.1.1.zip \
-  --asset-url https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v0.1.1/PS5-Windows-Hub-0.1.1.zip \
-  --release-notes release-notes.txt \
-  --output manifest.json
-```
+## Publish the first release
 
-Then sign the exact file without editing or reformatting it afterward:
+Create GitHub Release `v0.1.1` and attach these public files from the matching CI artifact:
 
-```sh
-bash tools/release-signing/sign-manifest.sh \
-  "$HOME/.local/share/ps5-windows-hub-signing/update-signing-private.pem" \
-  manifest.json \
-  manifest.sig.base64
-```
-
-The output is a base64-encoded ECDSA P-256/SHA-256 DER signature. The verifier checks the signature against the exact downloaded manifest bytes.
-
-## 5. Publish only public release files
-
-After creating and signing the manifest, a maintainer with GitHub CLI access can publish the versioned ZIP, manifest, signature, and matching upstream source and license together:
-
-```sh
-bash tools/release-signing/publish-release.sh \
-  0.1.1 \
-  "$(tr -d '\r\n' < ./PS5-Windows-Hub-Preview/BUILDER-COMMIT.txt)" \
-  ./PS5-Windows-Hub-Preview \
-  ./manifest.json \
-  ./manifest.sig.base64 \
-  "$HOME/.local/share/ps5-windows-hub-signing/update-signing-public.pem" \
-  ./release-notes.txt \
-  loudply0-eng/PS5-Windows-Hub-Builder
-```
-
-The script verifies the packaged SHA-256 list, checks that the target commit matches the commit recorded in the artifact, verifies the detached signature and P-256 curve, confirms the same public key is embedded in that commit's Windows app source, refuses to reuse an existing tag or release, and uploads only public assets. It never reads the private key.
-
-## 6. Never publish private material
-
-Publish only:
+- `PS5-Windows-Hub-0.1.1.zip`
 - `manifest.json`
 - `manifest.sig.base64`
-- the exact ZIP asset referenced by the signed manifest
+- `AnyPS5-v0.1.5-source.zip`
+- `LICENSE-AnyPS5.txt`
 
-Never publish:
-- `update-signing-private.pem`
-- an unencrypted backup of the private key
-- any private-key material in commits, issues, logs, workflow artifacts, or Oracle server storage
+The manifest must reference the exact versioned asset URL. Do not edit or reformat `manifest.json` after signing it. Verify that the latest-release URLs serve both manifest files and that the app can fetch and verify them before treating the release as live.
 
-The updater button remains disabled until the public key is embedded, the release metadata is fetched and verified in-app, and the full update/rollback tests pass.
+The `0.1.0` preview cannot bootstrap itself because its update feature is disabled. Install the signed `0.1.1` package once. After that first bootstrap installation and release publication, later updates are checked at startup and every six hours while the app is open, downloaded and verified automatically, installed without a confirmation prompt, and followed by an automatic restart. The updater keeps the previous installation for rollback and leaves user data outside the replacement directory.
+
+## Legacy command-line helpers
+
+The scripts in this folder (`create-manifest.py`, `sign-manifest.sh`, and `publish-release.sh`) remain for maintainers who intentionally use an offline shell workflow. They are not needed for the Windows GUI signing path. Never use `generate-key.sh` with the existing production trust anchor.
