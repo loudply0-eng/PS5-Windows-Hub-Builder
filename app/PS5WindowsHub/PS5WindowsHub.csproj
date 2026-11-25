@@ -8,6 +8,6 @@
     <AssemblyName>PS5-Windows-Hub</AssemblyName>
     <RootNamespace>PS5WindowsHub</RootNamespace>
     <Product>PS5 WINDOWS HUB</Product>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
   </PropertyGroup>
 </Project>
