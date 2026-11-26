@@ -8,10 +8,10 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
 
 - [x] Move the Windows CI workflow to GitHub-hosted `windows-latest`.
 - [x] Build the WinForms application and the AnyPS5 relinker-only component on Windows CI.
-- [x] Run relinker, updater security, offline signing-tool, updater-helper, install/rollback integration tests.
-- [x] Verify the latest PR #7 head: run [45804637894](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45804637894) succeeded on `3b082f52c7717693ea5abec37b154e5aaedb9a09`; all executed build/test steps passed.
+- [x] Run relinker, updater security, Kyty path/input/argument-construction, offline signing-tool, updater-helper, install/rollback integration tests.
+- [x] Verify the latest PR #7 head before documentation follow-ups: run [45804637894](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45804637894) succeeded on `3b082f52c7717693ea5abec37b154e5aaedb9a09`; all executed build/test steps passed.
 - [x] Correct documentation that incorrectly described the public Builder repository as private.
-- [x] Correct the README: the current workflow does not yet include a dedicated Kyty process-launch validation test.
+- [x] Clarify that Kyty CI tests validate paths, inputs and argument construction; they do not launch a real Kyty binary.
 - [x] Archive the obsolete self-hosted-runner setup guide.
 - [x] Record the difference between the AnyPS5 audit HEAD and the pinned `v0.1.5` release used by the preview workflow.
 - [x] Keep PRs in draft; no PR was merged and no release was published.
@@ -28,7 +28,7 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
    - Acceptance: install/extract to a normal user-writable directory, launch the app, inspect startup logs, confirm no unexpected elevation requirement, verify relinker and Kyty tabs explain their limitations correctly.
 
 3. **Validate Kyty external-process launch safely**
-   - Status: requires a Windows machine and a legitimate user-selected Kyty installation.
+   - Status: requires a Windows machine and a legitimate user-selected Kyty installation. CI currently tests path/input validation and argument construction, not a real emulator process launch.
    - Acceptance: missing path, invalid executable, unsupported input, and normal launch paths produce clear results; no bundled or modified Kyty binaries.
 
 4. **Validate the local release-signing key**
