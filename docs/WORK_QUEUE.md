@@ -19,9 +19,9 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
 ## P0 — release and user-install readiness
 
 1. **Produce a fresh preview artifact for the latest commit**
-   - Status: waiting for a maintainer-triggered `workflow_dispatch` run.
+   - Status: build and all CI checks succeeded for code head `35deb3c5a6ac298553caaaa96020998ca7b8f4c0` on Windows CI run [45849903424](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45849903424). The follow-up change replacing the compile-time update flag with a static readonly field is included in that successful run; the earlier `CS0162` unreachable-code warning is absent.
+   - Remaining action: a maintainer must run `workflow_dispatch` on the final reviewed branch head to upload the artifact. PR CI intentionally skips upload.
    - Acceptance: artifact is uploaded for the exact reviewed commit, archive integrity passes, all published SHA-256 entries verify.
-   - Note: pull-request CI intentionally skips artifact upload; the successful PR run above is build/test evidence, not a downloadable artifact.
 
 2. **Run a clean Windows installation smoke test**
    - Status: requires a Windows machine.
@@ -48,9 +48,9 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
    - The settings-store tests verify exact round-trip and safe recovery from corrupt/unsupported settings. The Windows updater transaction test seeds representative values at the actual settings path, performs a successful directory swap and a failed-update rollback, then reads the JSON and verifies every setting is unchanged after both operations. A separate external user-data sentinel is also checked after both paths.
 
 7. **Reject reparse points in updater paths and clean backups without traversing links**
-   - Status: implemented and validated on Windows CI run [45848446282](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45848446282), exact head `561649c665c0720fde65a42493e9cf67d000ad31`; build, relinker tests, updater security tests, signing tests, updater transaction tests and SHA-256 checks all passed.
+   - Status: implemented and validated on Windows CI run [45849903424](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45849903424), exact code head `35deb3c5a6ac298553caaaa96020998ca7b8f4c0`; all build, relinker, updater security, signing, updater transaction and SHA-256 steps passed.
    - Coverage: validates every existing directory component from the volume root through staging, payload, installation and installation parent; verifies payload containment using a relative path; rejects a reparse-point application executable; and rejects payload/install paths that traverse Junction ancestors.
-   - The same Windows transaction run created an old backup containing a nested Junction, removed that backup tree without traversing the link, verified the external sentinel remained intact, and passed successful update, failed-health-check rollback, settings preservation and user-data preservation.
+   - The Windows transaction test created an old backup containing a nested Junction, removed that backup tree without traversing the link, verified the external sentinel remained intact, and passed successful update, failed-health-check rollback, settings persistence and user-data preservation.
    - Limitation: path validation is not a complete defence against a hostile same-user process racing filesystem changes between validation and use (TOCTOU).
 
 8. **Add clean-install and upgrade end-to-end automation**
