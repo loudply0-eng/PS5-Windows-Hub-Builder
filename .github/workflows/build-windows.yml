@@ -3,7 +3,7 @@ name: Build PS5 Windows Hub CI (AnyPS5 relinker preview)
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, feat/signed-auto-updater-20261124]
+    branches: [main, feat/signed-auto-updater-20261124, ci/github-hosted-windows-20261126]
 
 permissions:
   contents: read
