@@ -34,6 +34,32 @@ string Sign(byte[] bytes, ECDsa? key = null) =>
 string testRoot = Path.Combine(Path.GetTempPath(), "PS5WindowsHub-SecurityTests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(testRoot);
 
+Check("application settings survive an exact JSON round trip", () =>
+{
+    var settingsPath = Path.Combine(testRoot, "settings-roundtrip", "settings.json");
+    var expected = new HubSettings
+    {
+        KytyDirectory = @"C:\\Tools\\Kyty PS5",
+        GameInput = @"D:\\Games\\My PS5 Game",
+        RelinkerInput = @"D:\\Games\\eboot.bin",
+        RelinkerOutput = @"D:\\Output\\game_windows.exe"
+    };
+    HubSettingsStore.Save(expected, settingsPath);
+    var actual = HubSettingsStore.Load(settingsPath);
+    if (actual != expected) throw new Exception("Persisted settings differ from the saved values.");
+});
+
+Check("corrupt or unsupported application settings fall back to defaults", () =>
+{
+    var settingsPath = Path.Combine(testRoot, "settings-corrupt.json");
+    File.WriteAllText(settingsPath, "{ invalid json");
+    var corrupt = HubSettingsStore.Load(settingsPath);
+    if (corrupt != new HubSettings()) throw new Exception("Corrupt settings were not reset safely.");
+    File.WriteAllText(settingsPath, "{\\"SchemaVersion\\":99,\\"KytyDirectory\\":\\"ignored\\"}");
+    var unsupported = HubSettingsStore.Load(settingsPath);
+    if (unsupported != new HubSettings()) throw new Exception("Unsupported settings schema was not ignored.");
+});
+
 KytyEngineLauncherTests.Run(Check, testRoot);
 
 void BuildZip(string zipPath, params (string Name, int Attributes, string Content)[] entries)
