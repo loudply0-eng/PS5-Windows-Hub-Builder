@@ -12,7 +12,7 @@ This is a self-contained Windows x64 GUI shell built with .NET 8 WinForms.
 - Keep the AnyPS5 relinker in a separate experimental tab. It only relinks ELF files and is not represented as a complete PS5 emulator.
 - Expose a noninteractive startup health-check mode for the separate updater helper.
 
-KytyPS5 is not bundled, modified, linked, or copied into the Hub package. The user installs the official engine separately. The Hub expects `relinker.exe` and `PS5WindowsHub.Updater.exe` beside `PS5-Windows-Hub.exe`.
+KytyPS5 is not bundled, modified, linked, or copied into the Hub package. The current integration preview still expects the user to select a separately installed engine folder. This is an intermediate development state, not the intended end-user experience. The required release design is a single PS5 Windows Hub installer containing a pinned KytyPS5 runtime under `Engine/KytyPS5/`, so users install only the Hub. That bundled-runtime packaging step is not implemented or verified yet. Any distributed KytyPS5 runtime must include GPL-2.0-only notices and complete corresponding-source access.
 
 ## Secure updates
 
