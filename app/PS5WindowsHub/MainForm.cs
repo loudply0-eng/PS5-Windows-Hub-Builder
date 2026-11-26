@@ -84,7 +84,16 @@ internal sealed class MainForm : Form
             + "لا يتم تضمين المحرك أو ملفات الألعاب أو مفاتيح/برامج النظام ضمن هذه الحزمة.\r\n"
             + "أداة AnyPS5 relinker في التبويب الآخر تجريبية ولا تمثل محاكي PS5 كاملاً.\r\n";
         root.Controls.Add(log, 0, 4);
-        SetStatus("جاهز — ثبّت محرك KytyPS5 الرسمي ثم حدّد مجلد اللعبة.");
+        var savedSettings = HubSettingsStore.Load();
+        kytyDirectory.Text = savedSettings.KytyDirectory;
+        gameInput.Text = savedSettings.GameInput;
+        input.Text = savedSettings.RelinkerInput;
+        output.Text = savedSettings.RelinkerOutput;
+        kytyDirectory.TextChanged += (_, _) => SaveSettings();
+        gameInput.TextChanged += (_, _) => SaveSettings();
+        input.TextChanged += (_, _) => SaveSettings();
+        output.TextChanged += (_, _) => SaveSettings();
+        SetStatus("جاهز — الإعدادات والمسارات تُحفظ محلياً تلقائياً.");
 
         Shown += async (_, _) =>
         {
@@ -531,6 +540,24 @@ internal sealed class MainForm : Form
         log.AppendText(line + Environment.NewLine);
         log.SelectionStart = log.TextLength;
         log.ScrollToCaret();
+    }
+
+    private void SaveSettings()
+    {
+        try
+        {
+            HubSettingsStore.Save(new HubSettings
+            {
+                KytyDirectory = kytyDirectory.Text,
+                GameInput = gameInput.Text,
+                RelinkerInput = input.Text,
+                RelinkerOutput = output.Text
+            });
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Settings could not be saved: " + ex.Message);
+        }
     }
 
     private void SetStatus(string message) => status.Text = message;
