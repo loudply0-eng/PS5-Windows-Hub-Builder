@@ -9,8 +9,9 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
 - [x] Move the Windows CI workflow to GitHub-hosted `windows-latest`.
 - [x] Build the WinForms application and the AnyPS5 relinker-only component on Windows CI.
 - [x] Run relinker, updater security, offline signing-tool, updater-helper, install/rollback integration tests.
-- [x] Verify the workflow on the current PR #7 head: run [45803662409](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45803662409) succeeded on `f6a34e4fdfbc7eed6c088bd833e8c89a44c55dd4`.
+- [x] Verify the latest PR #7 head: run [45804637894](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45804637894) succeeded on `3b082f52c7717693ea5abec37b154e5aaedb9a09`; all executed build/test steps passed.
 - [x] Correct documentation that incorrectly described the public Builder repository as private.
+- [x] Correct the README: the current workflow does not yet include a dedicated Kyty process-launch validation test.
 - [x] Archive the obsolete self-hosted-runner setup guide.
 - [x] Record the difference between the AnyPS5 audit HEAD and the pinned `v0.1.5` release used by the preview workflow.
 - [x] Keep PRs in draft; no PR was merged and no release was published.
@@ -56,7 +57,7 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
    - Acceptance: directly verify main-branch ruleset, required checks, least-privilege Actions permissions, Dependabot alerts/security updates, secret scanning and push protection where available. Do not infer settings from workflow files.
 
 10. **Resolve ABRJ Core CI startup failure**
-    - Status: blocked on actionable GitHub runner diagnostics. Run [45803323965](https://github.com/loudply0-eng/PS5-Windows-Hub-Core/actions/runs/45803323965) failed before any step summary was exposed; job-log retrieval returned 404, so the cause is not yet known.
+    - Status: blocked on actionable GitHub runner diagnostics. Latest run [45804983367](https://github.com/loudply0-eng/PS5-Windows-Hub-Core/actions/runs/45804983367) failed before exposing any job steps; job-step retrieval returned an empty list and log retrieval was unavailable. The cause is not established; do not label it a source-code failure.
     - Acceptance: obtain runner/job initialization diagnostics, fix the actual cause, then pass configure, build and CTest on Windows.
 
 ## P2 — real engine development (not a preview promise)
