@@ -43,8 +43,9 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
 
 ## P1 — hardening
 
-6. **Add persistent user-data preservation coverage**
-   - Acceptance: integration test proves settings and user data outside the application install directory survive successful update and rollback.
+6. **Complete persistent user-data preservation coverage**
+   - Status: partial. The Windows updater transaction workflow creates a sentinel under `%LOCALAPPDATA%\\PS5WindowsHub\\UserData` and verifies it survives both a successful directory swap and a failed-update rollback. This proves the updater does not replace that external directory. The desktop app does not yet expose a defined persistent settings/data store, so application-level settings round-trip coverage remains outstanding.
+   - Acceptance to close: define the app's supported settings/data location and format, write representative settings through the app, run update and rollback, then verify the app can read the exact values afterward.
 
 7. **Add clean-install and upgrade end-to-end automation**
    - Acceptance: Windows CI installs the packaged build in a temporary directory, starts it, validates health, applies a signed test update, and verifies rollback without touching a real user install.
