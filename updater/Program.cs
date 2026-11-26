@@ -135,7 +135,7 @@ internal static class Program
                 try
                 {
                     if ((File.GetAttributes(oldBackup) & FileAttributes.ReparsePoint) == 0)
-                        Directory.Delete(oldBackup, recursive: true);
+                        DeleteDirectoryTreeWithoutFollowingReparsePoints(oldBackup);
                 }
                 catch { /* Keep the new update successful; an older backup may be removed manually. */ }
             }
@@ -162,6 +162,45 @@ internal static class Program
             try { if (Directory.Exists(replacementDirectory)) Directory.Delete(replacementDirectory, recursive: true); }
             catch { /* best-effort cleanup */ }
         }
+    }
+
+    private static void DeleteDirectoryTreeWithoutFollowingReparsePoints(string path)
+    {
+        var attributes = File.GetAttributes(path);
+
+        // Never descend through a junction, symlink, mount point or other reparse point.
+        // A top-level reparse-point backup is skipped by the caller; nested reparse
+        // points are removed as links themselves, without traversing their targets.
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+            return;
+
+        if ((attributes & FileAttributes.Directory) == 0)
+        {
+            File.Delete(path);
+            return;
+        }
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path))
+        {
+            var entryAttributes = File.GetAttributes(entry);
+            if ((entryAttributes & FileAttributes.ReparsePoint) != 0)
+            {
+                if ((entryAttributes & FileAttributes.Directory) != 0)
+                    Directory.Delete(entry, recursive: false);
+                else
+                    File.Delete(entry);
+            }
+            else if ((entryAttributes & FileAttributes.Directory) != 0)
+            {
+                DeleteDirectoryTreeWithoutFollowingReparsePoints(entry);
+            }
+            else
+            {
+                File.Delete(entry);
+            }
+        }
+
+        Directory.Delete(path, recursive: false);
     }
 
     private static void EnsureNoReparsePointsInDirectoryPath(string path, string description)
