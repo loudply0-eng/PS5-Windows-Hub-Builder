@@ -13,13 +13,13 @@ Windows build and packaging repository for **PS5 WINDOWS HUB**.
 
 The desktop shell now includes a **KytyPS5 launch tab**. The current preview still asks the user to select an engine folder, but this is only an intermediate development state. The required release experience is one PS5 Windows Hub installer containing a pinned KytyPS5 Windows runtime under `Engine/KytyPS5/`; users must not need to download or install Kyty separately. Bundled-runtime packaging and its corresponding-source delivery are not implemented or verified yet. Any distributed KytyPS5 runtime must comply with GPL-2.0-only, including notices and complete corresponding-source availability. The AnyPS5 relinker remains a separate experimental utility and is not a complete PS5 emulator.
 
-The workflow runs relinker tests, updater security tests, Kyty process-launch validation tests, offline signing-tool tests, and updater install/rollback integration tests. Run #170 is currently queued pending an available self-hosted Windows runner; no result is claimed for the new integration until that run executes.
+The workflow runs relinker tests, updater security tests (including Kyty path/input validation and argument-construction tests), offline signing-tool tests, and updater install/rollback integration tests. The Kyty tests do not start a real Kyty executable; an actual launch against a user-selected Windows installation remains a manual smoke test. The GitHub-hosted Windows PR run [45804637894](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45804637894) completed successfully on commit `3b082f52c7717693ea5abec37b154e5aaedb9a09`. This verifies the listed CI build and test suite; it does not prove that a real signed release can update an installed user's PC or that a PS5 game is playable.
 
 ## Build runner and Actions cost
 
-The Windows workflow targets the repository-scoped self-hosted Windows x64 runner labelled `ps5-windows-hub`. This avoids GitHub-hosted compute-minute charges. The runner PC supplies the CPU and build environment; GitHub artifact storage is still subject to the account's allowance.
+The Windows workflow uses GitHub-hosted `windows-latest` runners. GitHub-hosted Actions usage is subject to the account's included minutes and billing limits.
 
-Build artifacts are uploaded only for a manual owner-triggered workflow run and retained for one day. See [the self-hosted runner setup guide](docs/SELF_HOSTED_RUNNER_SETUP.md) before expecting a queued build to start.
+Build artifacts are uploaded only for a manual owner-triggered workflow run and retained for one day. Use the **Actions** tab to start a manual build when a fresh artifact is needed.
 
 ## Secure updates — implementation present, public release pending
 
@@ -29,7 +29,7 @@ The offline signer is packaged separately under `ReleaseSigner/`. It uses the en
 
 **No official signed GitHub Release has been published yet.** CI success verifies the build and test harness, not the complete live update path. The first stable release must be signed locally and published with the exact versioned update ZIP, `manifest.json`, `manifest.sig.base64`, matching AnyPS5 source, and license. A real installed-client update test is still required.
 
-**Distribution constraint:** this Builder repository is currently private. Anonymous installations cannot download its private release assets or metadata. Before public distribution or in-app updates for other users, release metadata/assets must be hosted at a separate public HTTPS endpoint and the app's pinned URLs updated (or the Builder repository deliberately made public). Do not expose the private Core repository or any private signing material.
+**Distribution status:** this Builder repository is public, and the app's metadata URLs point to its GitHub Releases. No signed release is published yet, so public clients cannot receive a real automatic update until the first signed release is created and tested. Keep the Core repository private and never expose private signing material.
 
 The ECDSA update signature authenticates update metadata; it is **not** a Windows Authenticode publisher signature. Without an Authenticode certificate, Windows may still display an unknown-publisher/SmartScreen warning.
 
@@ -46,4 +46,4 @@ A successful relink or successful process launch does not prove a game is playab
 - Never commit private signing keys, passphrases, game files, firmware, or console keys.
 - Third-party GitHub Actions are pinned to full commit SHAs.
 - Workflow repository permissions remain read-only.
-- Do not run untrusted pull-request code with secrets or on the self-hosted runner.
+- Do not expose secrets to pull-request workflows. The current workflow is restricted to owner-created same-repository pull requests and uses read-only repository permissions.
