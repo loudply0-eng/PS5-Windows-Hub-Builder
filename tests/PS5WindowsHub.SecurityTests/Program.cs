@@ -34,6 +34,8 @@ string Sign(byte[] bytes, ECDsa? key = null) =>
 string testRoot = Path.Combine(Path.GetTempPath(), "PS5WindowsHub-SecurityTests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(testRoot);
 
+KytyEngineLauncherTests.Run(Check, testRoot);
+
 void BuildZip(string zipPath, params (string Name, int Attributes, string Content)[] entries)
 {
     using var file = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write);
