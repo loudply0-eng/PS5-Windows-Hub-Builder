@@ -13,11 +13,11 @@ Windows build and packaging repository for **PS5 WINDOWS HUB**.
 
 The desktop shell now includes a **KytyPS5 launch tab**. The current preview still asks the user to select an engine folder, but this is only an intermediate development state. The required release experience is one PS5 Windows Hub installer containing a pinned KytyPS5 Windows runtime under `Engine/KytyPS5/`; users must not need to download or install Kyty separately. Bundled-runtime packaging and its corresponding-source delivery are not implemented or verified yet. Any distributed KytyPS5 runtime must comply with GPL-2.0-only, including notices and complete corresponding-source availability. The AnyPS5 relinker remains a separate experimental utility and is not a complete PS5 emulator.
 
-The workflow runs relinker tests, updater security tests, Kyty process-launch validation tests, offline signing-tool tests, and updater install/rollback integration tests. Run #170 is currently queued pending an available self-hosted Windows runner; no result is claimed for the new integration until that run executes.
+The workflow runs relinker tests, updater security tests, Kyty process-launch validation tests, offline signing-tool tests, and updater install/rollback integration tests. The GitHub-hosted Windows run [45796580738](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45796580738) completed successfully for this branch. This verifies the CI build and test suite; it does not prove that a real signed release can update an installed user's PC.
 
 ## Build runner and Actions cost
 
-The Windows workflow targets the repository-scoped self-hosted Windows x64 runner labelled `ps5-windows-hub`. This avoids GitHub-hosted compute-minute charges. The runner PC supplies the CPU and build environment; GitHub artifact storage is still subject to the account's allowance.
+The Windows workflow uses GitHub-hosted `windows-latest` runners. GitHub-hosted Actions usage is subject to the account's included minutes and billing limits.
 
 Build artifacts are uploaded only for a manual owner-triggered workflow run and retained for one day. See [the self-hosted runner setup guide](docs/SELF_HOSTED_RUNNER_SETUP.md) before expecting a queued build to start.
 
