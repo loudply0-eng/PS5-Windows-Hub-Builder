@@ -1,35 +1,49 @@
 # PS5 Windows Hub — Builder
 
-Public, owner-triggered Windows CI for PS5 Windows Hub.
+Windows build and packaging repository for **PS5 WINDOWS HUB**.
 
-## Current workflow
+## Current build
 
-`.github/workflows/build-windows.yml` builds the upstream AnyPS5 **relinker-only** target for Windows from the fixed upstream release v0.1.5.
+`.github/workflows/build-windows.yml` builds:
 
-- Trigger: manual `workflow_dispatch`
-- Runner: GitHub-hosted Windows runner
-- Toolchain: MSYS2 UCRT64 / MinGW-w64
-- Upstream source: public AnyPS5 tag v0.1.5, pinned to commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`
-- Tests: CTest
-- Output: relinker executable, corresponding upstream source archive, license and SHA-256 checksums
-- Artifact retention: 14 days
+- A self-contained .NET 8 WinForms desktop shell for Windows x64.
+- The upstream AnyPS5 v0.1.5 **relinker-only** executable, pinned to commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`.
+- A separate self-contained updater helper and an offline Windows release-signing GUI.
+- Matching AnyPS5 source and GPL-2.0-only license notices, plus SHA-256 checksums.
 
-Only the GitHub account `loudply0-eng` can start this workflow in this repository. It has read-only repository permissions and uses no secrets or private-repository token.
+The desktop shell now includes a **KytyPS5 launch tab**. The current preview still asks the user to select an engine folder, but this is only an intermediate development state. The required release experience is one PS5 Windows Hub installer containing a pinned KytyPS5 Windows runtime under `Engine/KytyPS5/`; users must not need to download or install Kyty separately. Bundled-runtime packaging and its corresponding-source delivery are not implemented or verified yet. Any distributed KytyPS5 runtime must comply with GPL-2.0-only, including notices and complete corresponding-source availability. The AnyPS5 relinker remains a separate experimental utility and is not a complete PS5 emulator.
 
-## Important limitation
+The workflow runs relinker tests, updater security tests, Kyty process-launch validation tests, offline signing-tool tests, and updater install/rollback integration tests. Run #170 is currently queued pending an available self-hosted Windows runner; no result is claimed for the new integration until that run executes.
 
-This is an initial toolchain and relinker test build. It is **not** the complete AnyPS5 Windows runtime and does not mean PS5 games are broadly playable. The full Windows system-library build and per-game compatibility testing are separate milestones.
+## Build runner and Actions cost
 
-## Upstream and license
+The Windows workflow targets the repository-scoped self-hosted Windows x64 runner labelled `ps5-windows-hub`. This avoids GitHub-hosted compute-minute charges. The runner PC supplies the CPU and build environment; GitHub artifact storage is still subject to the account's allowance.
 
-- https://github.com/boykopovar/AnyPS5
-- Upstream license: GPL-2.0-only
+Build artifacts are uploaded only for a manual owner-triggered workflow run and retained for one day. See [the self-hosted runner setup guide](docs/SELF_HOSTED_RUNNER_SETUP.md) before expecting a queued build to start.
 
-Every distributed build derived from AnyPS5 must meet the GPL-2.0-only source and notice requirements. The workflow includes the matching upstream source archive and license with the build artifact.
+## Secure updates — implementation present, public release pending
+
+The WinForms app currently has secure update checks enabled. It contains an ECDSA P-256 public trust anchor and checks signed release metadata after startup and every six hours. The update path verifies the signature, manifest, approved release asset URL, file size, and SHA-256 before staging the update through a separate helper. The helper has install health checks, backup, rollback, and user-data preservation logic.
+
+The offline signer is packaged separately under `ReleaseSigner/`. It uses the encrypted private key locally, verifies that its public key matches the app's embedded trust anchor, and creates `manifest.json` plus `manifest.sig.base64`. The private key and passphrase must remain on the maintainer's own device; neither belongs in GitHub or in ChatGPT.
+
+**No official signed GitHub Release has been published yet.** CI success verifies the build and test harness, not the complete live update path. The first stable release must be signed locally and published with the exact versioned update ZIP, `manifest.json`, `manifest.sig.base64`, matching AnyPS5 source, and license. A real installed-client update test is still required.
+
+**Distribution constraint:** this Builder repository is currently private. Anonymous installations cannot download its private release assets or metadata. Before public distribution or in-app updates for other users, release metadata/assets must be hosted at a separate public HTTPS endpoint and the app's pinned URLs updated (or the Builder repository deliberately made public). Do not expose the private Core repository or any private signing material.
+
+The ECDSA update signature authenticates update metadata; it is **not** a Windows Authenticode publisher signature. Without an Authenticode certificate, Windows may still display an unknown-publisher/SmartScreen warning.
+
+## Engine and licensing boundaries
+
+- **KytyPS5:** https://github.com/KytyPS5/KytyPS5 — GPL-2.0-only. The Hub launches a separately installed, unmodified upstream executable. Do not copy, link, patch, or redistribute KytyPS5 through the Hub without a separate GPL compliance review and the exact corresponding source/notices.
+- **AnyPS5:** https://github.com/boykopovar/AnyPS5 — v0.1.5 at commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`, GPL-2.0-only. This is a relinker-only utility, not a complete PS5 runtime. Its matching source and license are packaged with the build.
+
+A successful relink or successful process launch does not prove a game is playable. Compatibility must be tested per title and per engine build.
 
 ## Security
 
-- No private Core checkout.
-- No secrets, signing keys, game files, firmware or console keys.
-- Third-party actions are pinned to full commit SHAs.
-- Do not add pull-request workflows that execute untrusted code with secrets.
+- Core remains private; this Builder repository contains no private Core checkout.
+- Never commit private signing keys, passphrases, game files, firmware, or console keys.
+- Third-party GitHub Actions are pinned to full commit SHAs.
+- Workflow repository permissions remain read-only.
+- Do not run untrusted pull-request code with secrets or on the self-hosted runner.

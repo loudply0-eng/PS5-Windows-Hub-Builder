@@ -9,13 +9,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: ps5-windows-hub-build
-  cancel-in-progress: false
+  group: ps5-windows-hub-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
-    if: github.actor == 'loudply0-eng'
-    runs-on: windows-latest
+    if: github.actor == 'loudply0-eng' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Windows, X64, ps5-windows-hub]
     timeout-minutes: 60
     defaults:
       run:
@@ -25,6 +25,9 @@ jobs:
       - name: Checkout builder workflow
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          # Build the exact source commit that will be named in the artifact and release.
+          # The default pull_request checkout is a synthetic merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Install pinned MSYS2 toolchain environment
@@ -38,6 +41,7 @@ jobs:
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-openssl
 
       - name: Fetch upstream AnyPS5 source at fixed release
         run: |
@@ -63,36 +67,193 @@ jobs:
           set -euo pipefail
           cmake --build build-relinker --parallel 2
 
+      - name: Verify standalone x64 relinker
+        run: |
+          set -euo pipefail
+          binary="build-relinker/core/relinker/relinker.exe"
+          test -f "$binary"
+          objdump -f "$binary" | grep -qi 'architecture: i386:x86-64'
+          if objdump -p "$binary" | grep -Eiq 'DLL Name: (libstdc\+\+-6|libgcc_s_seh-1|libwinpthread-1|libatomic-1|libgomp-1)\.dll'; then
+            echo "The relinker still depends on a MinGW runtime DLL."
+            exit 1
+          fi
+
       - name: Run relinker tests
         run: |
           set -euo pipefail
           ctest --test-dir build-relinker -L relinker --output-on-failure
 
+      - name: Build PS5 Windows Hub desktop application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet --info
+          dotnet publish app/PS5WindowsHub/PS5WindowsHub.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:IncludeNativeLibrariesForSelfExtract=true -o app-publish
+
+      - name: Run updater security tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet run --project tests/PS5WindowsHub.SecurityTests/PS5WindowsHub.SecurityTests.csproj -c Release
+
+      - name: Test offline release signing tools
+        run: |
+          set -euo pipefail
+          python tests/release-signing-tools/test_release_signing.py
+
+      - name: Build offline release signer GUI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish tools/PS5WindowsHub.ReleaseSigner/PS5WindowsHub.ReleaseSigner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o release-signer-publish
+
+      - name: Publish standalone updater helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o updater-publish
+          Copy-Item updater-publish/PS5WindowsHub.Updater.exe app-publish/PS5WindowsHub.Updater.exe
+
+      - name: Publish test-only updater helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish updater/PS5WindowsHub.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UpdaterTestMode=true -o updater-test-publish
+
+      - name: Run updater transaction integration tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $install = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Install-Test'
+          $stageRoot = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/Updates/Staging'
+          $payload = Join-Path $stageRoot 'ci-integration-payload'
+          $badPayload = Join-Path $stageRoot 'ci-rollback-payload'
+          $helperDir = Join-Path $stageRoot 'ci-helper'
+          $backupPattern = '.PS5WindowsHub-backup-*'
+          Remove-Item $install,$payload,$badPayload,$helperDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $install,$payload,$badPayload,$helperDir | Out-Null
+
+          Copy-Item -Path 'app-publish/*' -Destination $install -Recurse -Force
+          Copy-Item -Path 'app-publish/*' -Destination $payload -Recurse -Force
+          Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $install 'relinker.exe')
+          Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $payload 'relinker.exe')
+          $helper = Join-Path $helperDir 'PS5WindowsHub.Updater.exe'
+          Copy-Item 'updater-test-publish/PS5WindowsHub.Updater.exe' $helper
+
+          $productionHelper = 'app-publish/PS5WindowsHub.Updater.exe'
+          $productionHash = (Get-FileHash $productionHelper -Algorithm SHA256).Hash
+          $testHash = (Get-FileHash $helper -Algorithm SHA256).Hash
+          if ($productionHash -eq $testHash) { throw 'Test-only helper is byte-identical to production; the test-mode build was not isolated.' }
+
+          $userDataDirectory = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/UserData'
+          New-Item -ItemType Directory -Force -Path $userDataDirectory | Out-Null
+          $userDataSentinel = Join-Path $userDataDirectory 'ci-preservation-sentinel.txt'
+          $userDataSentinelContent = 'PS5 WINDOWS HUB USER DATA MUST SURVIVE UPDATES'
+          [System.IO.File]::WriteAllText($userDataSentinel, $userDataSentinelContent)
+
+          $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
+
+          $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
+          [void]$mutex.WaitOne()
+          try {
+            $psi = [System.Diagnostics.ProcessStartInfo]::new()
+            $psi.FileName = $helper
+            $psi.UseShellExecute = $false
+            foreach ($arg in @('--install-dir',$install,'--payload-dir',$payload,'--parent-pid',"$parentPid")) { $psi.ArgumentList.Add($arg) }
+            $p = [System.Diagnostics.Process]::Start($psi)
+            Start-Sleep -Seconds 2
+          } finally {
+            $mutex.ReleaseMutex()
+            $mutex.Dispose()
+          }
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw 'Updater success-path test timed out.' }
+          if ($p.ExitCode -ne 0) { throw "Updater successful-install test failed with exit code $($p.ExitCode)." }
+          if (-not (Test-Path (Join-Path $install 'PS5-Windows-Hub.exe'))) { throw 'Updated application executable is missing.' }
+          if (-not (Get-ChildItem $env:RUNNER_TEMP -Directory -Filter $backupPattern)) { throw 'Previous-version backup was not retained.' }
+          if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Successful update changed or removed application user data.' }
+
+          Copy-Item -Path 'app-publish/*' -Destination $badPayload -Recurse -Force
+          Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $badPayload 'relinker.exe')
+          Set-Content -Path (Join-Path $badPayload 'PS5-Windows-Hub.exe') -Value 'not-a-valid-windows-executable'
+          $beforeRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
+
+          $psi2 = [System.Diagnostics.ProcessStartInfo]::new()
+          $psi2.FileName = $helper
+          $psi2.UseShellExecute = $false
+          foreach ($arg in @('--install-dir',$install,'--payload-dir',$badPayload,'--parent-pid',"$parentPid")) { $psi2.ArgumentList.Add($arg) }
+          $p2 = [System.Diagnostics.Process]::Start($psi2)
+          if (-not $p2.WaitForExit(120000)) { $p2.Kill(); throw 'Updater rollback test timed out.' }
+          if ($p2.ExitCode -eq 0) { throw 'Updater accepted a corrupt application during rollback test.' }
+          $afterRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
+          if ($beforeRollback -ne $afterRollback) { throw 'Failed update did not restore the prior application.' }
+          if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Failed update or rollback changed or removed application user data.' }
+          Write-Host 'Updater transaction tests passed: isolated production/test binaries, successful swap, rollback, and user-data preservation.'
+
       - name: Prepare binaries, corresponding source and checksums
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
           set -euo pipefail
           test -f build-relinker/core/relinker/relinker.exe
-          mkdir -p dist
+          mkdir -p dist/PS5-Windows-Hub dist/ReleaseSigner
+          cp -a release-signer-publish/. dist/ReleaseSigner/
           cp build-relinker/core/relinker/relinker.exe dist/relinker.exe
+          cp -a app-publish/. dist/PS5-Windows-Hub/
+          cp build-relinker/core/relinker/relinker.exe dist/PS5-Windows-Hub/relinker.exe
           cp upstream/LICENSE dist/LICENSE-AnyPS5.txt
           git -C upstream archive --format=zip --output=../dist/AnyPS5-v0.1.5-source.zip HEAD
+          actual_commit="$(git rev-parse HEAD)"
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            expected_commit="$(python -c 'import json, os; print(json.load(open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8"))["pull_request"]["head"]["sha"])')"
+          else
+            expected_commit="$GITHUB_SHA"
+          fi
+          test "$actual_commit" = "$expected_commit"
+          printf '%s\n' "$actual_commit" > dist/BUILDER-COMMIT.txt
           printf '%s\n' \
-            'PS5 Windows Hub - engine build preview' \
-            'Build scope: AnyPS5 relinker-only (not the complete game runtime)' \
+            'PS5 Windows Hub - desktop shell and relinker preview' \
+            'App: self-contained .NET 8 WinForms front end; signed automatic updates enabled; dedicated updater helper included' \
+            'Engine scope: AnyPS5 relinker-only (not the complete game runtime)' \
             'Upstream: https://github.com/boykopovar/AnyPS5' \
             'Upstream tag: v0.1.5' \
             'Upstream commit: 62bd7dd61e2b8a7a59262c4c145edff549bae5b9' \
             'License: GPL-2.0-only' \
             'The matching upstream source archive and license are included.' \
+            'Offline release-signing GUI is provided separately in ReleaseSigner/; no private key is included.' \
             > dist/BUILD-INFO.txt
-          sha256sum dist/relinker.exe dist/AnyPS5-v0.1.5-source.zip > dist/SHA256SUMS.txt
+
+      - name: Create versioned update payload ZIP
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'app/PS5WindowsHub/PS5WindowsHub.csproj'
+          $version = $project.Project.PropertyGroup.Version
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw "Unexpected app version: $version" }
+          $asset = "dist/PS5-Windows-Hub-$version.zip"
+          Compress-Archive -Path 'dist/PS5-Windows-Hub/*' -DestinationPath $asset -CompressionLevel Optimal -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $asset))
+          try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName })
+            foreach ($required in @('PS5-Windows-Hub.exe','PS5-Windows-Hub.dll','PS5WindowsHub.Updater.exe','relinker.exe')) {
+              if ($names -notcontains $required) { throw "Update ZIP is missing required root entry: $required" }
+            }
+          } finally { $archive.Dispose() }
+
+      - name: Generate and verify SHA-256 checksums
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
+          test -n "$version"
+          (cd dist && sha256sum BUILDER-COMMIT.txt BUILD-INFO.txt LICENSE-AnyPS5.txt relinker.exe PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
+          (cd dist && sha256sum --check SHA256SUMS.txt)
 
       - name: Upload Windows build artifact
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.actor == 'loudply0-eng'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: PS5-Windows-Hub-Engine-Preview
+          name: PS5-Windows-Hub-Preview
           path: dist/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
