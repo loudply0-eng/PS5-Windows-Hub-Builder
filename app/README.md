@@ -20,7 +20,7 @@ The secure update client is implemented and enabled in the current candidate. It
 
 The helper stages the update, waits for the app process to exit, performs a health check, retains a backup, and rolls back if validation fails. User data is stored outside the application replacement directory.
 
-A signed public release has **not** been published yet. The release signer must be run locally with the matching encrypted private key; the private key and passphrase must never be uploaded or sent in messages. The app's current release URLs point to this Builder repository, which is private. Public installs and automatic updates will not work anonymously until the assets are moved to a public release endpoint and the app's pinned URLs are updated (or the Builder repository is intentionally made public).
+A signed public release has **not** been published yet. The release signer must be run locally with the matching encrypted private key; the private key and passphrase must never be uploaded or sent in messages. The app's current release URLs point to this Builder repository, which is private. The Builder repository is public and the app's pinned metadata URLs target its GitHub Releases. However, no signed release or manifest has been published yet, so the updater cannot complete a real update until the first signed release is created and tested. The Core repository remains private.
 
 The ECDSA update signature is separate from Windows Authenticode signing. This build is not represented as Authenticode-signed.
 
