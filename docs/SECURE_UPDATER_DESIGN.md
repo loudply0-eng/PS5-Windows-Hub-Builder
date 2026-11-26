@@ -54,7 +54,7 @@ Observed repository state on 2026-11-26 (GitHub API inspection):
 
 - Repository metadata confirms the Builder repository is **public** and the Core repository remains **private**, matching the intended distribution arrangement.
 - The application source sets `EnableSecureUpdates = true`, embeds a non-empty ECDSA P-256 public key, starts an update check shortly after launch, and schedules checks every six hours. The offline signer source contains the corresponding expected public key and fingerprint; the maintainer's actual local private-key file has not been validated in this inspection.
-- The update client pins manifest and signature URLs to `github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/latest/download/`. Because Builder is private, unauthenticated installations cannot retrieve those release assets. A public release endpoint is a prerequisite for general in-app updates.
+- The update client pins manifest and signature URLs to `github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/latest/download/`. Builder is public, so future public release assets can be retrieved anonymously. No release exists yet, so the metadata and asset endpoints do not currently provide a signed update.
 - No signed GitHub Release or successful end-to-end installed-client update was verified during this inspection. The GitHub-hosted Windows CI run 45796580738 completed successfully. It validates the automated build/test suite, not a real signed-release update on an end-user installation.
 - The inspected tracked file tree did not show a private signing-key file. This does not prove that local key material exists or that GitHub Actions secrets, repository history, or account security settings are clean; those require separate checks.
 
