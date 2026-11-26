@@ -151,6 +151,19 @@ jobs:
           $userDataSentinelContent = 'PS5 WINDOWS HUB USER DATA MUST SURVIVE UPDATES'
           [System.IO.File]::WriteAllText($userDataSentinel, $userDataSentinelContent)
 
+          # Seed the real application settings location with representative persisted paths.
+          $settingsPath = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/settings.json'
+          $settingsJson = '{"SchemaVersion":1,"KytyDirectory":"C:\\Tools\\Kyty PS5","GameInput":"D:\\Games\\Sample Game","RelinkerInput":"D:\\Games\\eboot.bin","RelinkerOutput":"D:\\Output\\game_windows.exe"}'
+          [System.IO.File]::WriteAllText($settingsPath, $settingsJson)
+          $assertSettingsPreserved = {
+            if (-not (Test-Path $settingsPath)) { throw 'Application settings file was removed by update/rollback.' }
+            $actual = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+            $expected = $settingsJson | ConvertFrom-Json
+            foreach ($name in @('SchemaVersion','KytyDirectory','GameInput','RelinkerInput','RelinkerOutput')) {
+              if ($actual.$name -cne $expected.$name) { throw "Application setting '$name' changed during update/rollback." }
+            }
+          }
+
           $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
 
           $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
@@ -171,6 +184,7 @@ jobs:
           if (-not (Test-Path (Join-Path $install 'PS5-Windows-Hub.exe'))) { throw 'Updated application executable is missing.' }
           if (-not (Get-ChildItem $env:RUNNER_TEMP -Directory -Filter $backupPattern)) { throw 'Previous-version backup was not retained.' }
           if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Successful update changed or removed application user data.' }
+          & $assertSettingsPreserved
 
           Copy-Item -Path 'app-publish/*' -Destination $badPayload -Recurse -Force
           Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $badPayload 'relinker.exe')
@@ -187,7 +201,8 @@ jobs:
           $afterRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
           if ($beforeRollback -ne $afterRollback) { throw 'Failed update did not restore the prior application.' }
           if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Failed update or rollback changed or removed application user data.' }
-          Write-Host 'Updater transaction tests passed: isolated production/test binaries, successful swap, rollback, and user-data preservation.'
+          & $assertSettingsPreserved
+          Write-Host 'Updater transaction tests passed: successful swap, rollback, external user-data sentinel, and exact application settings preservation.'
 
       - name: Prepare binaries, corresponding source and checksums
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
