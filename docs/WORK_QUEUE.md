@@ -47,32 +47,37 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
    - Status: implemented and covered by automated tests. The desktop app stores its selected Kyty directory, game input, relinker input and output in versioned JSON at `%LOCALAPPDATA%\\PS5WindowsHub\\settings.json`; writes use a temporary file and atomic replacement, and corrupt/unknown-schema settings safely fall back to defaults.
    - The settings-store tests verify exact round-trip and safe recovery from corrupt/unsupported settings. The Windows updater transaction test seeds representative values at the actual settings path, performs a successful directory swap and a failed-update rollback, then reads the JSON and verifies every setting is unchanged after both operations. A separate external user-data sentinel is also checked after both paths.
 
-7. **Add clean-install and upgrade end-to-end automation**
+7. **Reject reparse points in updater path ancestors**
+   - Status: implemented in the updater and added Windows CI integration cases for a payload path and install path that each traverse a junction ancestor. Awaiting the new Windows CI run; do not mark validated until both rejection cases and the existing success/rollback transaction tests pass.
+   - Scope: validates every existing directory component from the volume root through staging, payload, installation and installation parent; verifies payload containment using a relative path; rejects a reparse-point application executable; skips a top-level reparse-point backup during cleanup.
+   - Limitation: path validation narrows junction/symlink redirection risks but is not a complete defence against a hostile same-user process racing filesystem changes between validation and use.
+
+8. **Add clean-install and upgrade end-to-end automation**
    - Acceptance: Windows CI installs the packaged build in a temporary directory, starts it, validates health, applies a signed test update, and verifies rollback without touching a real user install.
 
 8. **Decide on Authenticode signing**
    - Status: not implemented.
    - Acceptance: document publisher identity/certificate requirements and sign release executables if a legitimate code-signing certificate is obtained. ECDSA update metadata signatures are not Authenticode and do not remove SmartScreen warnings.
 
-9. **Review GitHub repository security settings**
+10. **Review GitHub repository security settings**
    - Acceptance: directly verify main-branch ruleset, required checks, least-privilege Actions permissions, Dependabot alerts/security updates, secret scanning and push protection where available. Do not infer settings from workflow files.
 
-10. **Resolve ABRJ Core CI startup failure**
+11. **Resolve ABRJ Core CI startup failure**
     - Status: blocked on actionable GitHub runner diagnostics. Latest run [45804983367](https://github.com/loudply0-eng/PS5-Windows-Hub-Core/actions/runs/45804983367) failed before exposing any job steps; job-step retrieval returned an empty list and log retrieval was unavailable. The cause is not established; do not label it a source-code failure.
     - Acceptance: obtain runner/job initialization diagnostics, fix the actual cause, then pass configure, build and CTest on Windows.
 
 ## P2 — real engine development (not a preview promise)
 
-11. **Turn the ABRJ coordinator prototype into a tested backend contract**
+12. **Turn the ABRJ coordinator prototype into a tested backend contract**
     - Acceptance: define capability discovery, preflight, process lifecycle, structured errors, logs, cancellation and deterministic backend selection; tests cover fallback before game execution.
 
-12. **Audit and pin a real native backend integration**
+13. **Audit and pin a real native backend integration**
     - Acceptance: select an exact upstream revision, record license/source obligations, build reproducibly on Windows, and prove a documented supported sample works. AnyPS5 relinker-only output must not be presented as a full emulator.
 
-13. **Implement and test Kyty integration boundaries**
+14. **Implement and test Kyty integration boundaries**
     - Acceptance: documented external process contract, version compatibility checks, exit-code mapping, logs and safe shutdown. No state migration between emulators is promised.
 
-14. **Define a game-compatibility evidence matrix**
+15. **Define a game-compatibility evidence matrix**
     - Acceptance: each tested title records source provenance, required user-provided files, hardware/driver, backend, exact build, boot result and known issues. Never label an untested title playable.
 
 ## Operating rules
