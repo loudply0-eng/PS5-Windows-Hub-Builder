@@ -166,6 +166,33 @@ jobs:
 
           $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
 
+          # Reject paths whose final directory looks normal but an ancestor is a junction.
+          $junctionPayloadTarget = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Junction-Payload-Target'
+          $junctionPayloadRoot = Join-Path $stageRoot 'ci-payload-parent-junction'
+          $junctionPayload = Join-Path $junctionPayloadRoot 'payload'
+          New-Item -ItemType Directory -Force -Path $junctionPayloadTarget | Out-Null
+          New-Item -ItemType Junction -Path $junctionPayloadRoot -Target $junctionPayloadTarget | Out-Null
+
+          $junctionInstallRoot = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Install-Parent-Junction'
+          New-Item -ItemType Junction -Path $junctionInstallRoot -Target $env:RUNNER_TEMP | Out-Null
+          $junctionInstall = Join-Path $junctionInstallRoot (Split-Path $install -Leaf)
+
+          function Assert-UpdaterRejectsPath($installPath, $payloadPath, $caseName) {
+            $rejectPsi = [System.Diagnostics.ProcessStartInfo]::new()
+            $rejectPsi.FileName = $helper
+            $rejectPsi.UseShellExecute = $false
+            foreach ($arg in @('--install-dir',$installPath,'--payload-dir',$payloadPath,'--parent-pid',"$parentPid")) { $rejectPsi.ArgumentList.Add($arg) }
+            $rejectProcess = [System.Diagnostics.Process]::Start($rejectPsi)
+            if (-not $rejectProcess.WaitForExit(30000)) { $rejectProcess.Kill(); throw "$caseName timed out." }
+            if ($rejectProcess.ExitCode -eq 0) { throw "Updater accepted unsafe path: $caseName" }
+          }
+
+          Assert-UpdaterRejectsPath $install $junctionPayload 'payload path with a junction ancestor'
+          Assert-UpdaterRejectsPath $junctionInstall $payload 'install path with a junction ancestor'
+          Remove-Item -LiteralPath $junctionPayloadRoot -Force
+          Remove-Item -LiteralPath $junctionInstallRoot -Force
+          Remove-Item -LiteralPath $junctionPayloadTarget -Recurse -Force
+
           $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
           [void]$mutex.WaitOne()
           try {
