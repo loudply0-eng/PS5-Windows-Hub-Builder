@@ -193,6 +193,16 @@ jobs:
           Remove-Item -LiteralPath $junctionInstallRoot -Force
           Remove-Item -LiteralPath $junctionPayloadTarget -Recurse -Force
 
+          # Seed an older backup with a nested junction. Cleanup must remove the
+          # backup tree without deleting or entering the external junction target.
+          $nestedBackup = Join-Path $env:RUNNER_TEMP '.PS5WindowsHub-backup-ci-nested-junction'
+          $nestedBackupTarget = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Backup-Cleanup-Target'
+          $backupSentinel = Join-Path $nestedBackupTarget 'must-survive-cleanup.txt'
+          New-Item -ItemType Directory -Force -Path $nestedBackup,$nestedBackupTarget | Out-Null
+          [System.IO.File]::WriteAllText((Join-Path $nestedBackup 'obsolete.txt'), 'obsolete backup data')
+          [System.IO.File]::WriteAllText($backupSentinel, 'external target must remain untouched')
+          New-Item -ItemType Junction -Path (Join-Path $nestedBackup 'external-link') -Target $nestedBackupTarget | Out-Null
+
           $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
           [void]$mutex.WaitOne()
           try {
@@ -212,6 +222,11 @@ jobs:
           if (-not (Get-ChildItem $env:RUNNER_TEMP -Directory -Filter $backupPattern)) { throw 'Previous-version backup was not retained.' }
           if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Successful update changed or removed application user data.' }
           & $assertSettingsPreserved
+          if (Test-Path -LiteralPath $nestedBackup) { throw 'Old backup containing a nested junction was not cleaned up.' }
+          if (-not (Test-Path -LiteralPath $backupSentinel) -or [System.IO.File]::ReadAllText($backupSentinel) -cne 'external target must remain untouched') {
+            throw 'Old-backup cleanup traversed or modified the external junction target.'
+          }
+          Remove-Item -LiteralPath $nestedBackupTarget -Recurse -Force
 
           Copy-Item -Path 'app-publish/*' -Destination $badPayload -Recurse -Force
           Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $badPayload 'relinker.exe')
