@@ -11,7 +11,7 @@ Windows build and packaging repository for **PS5 WINDOWS HUB**.
 - A separate self-contained updater helper and an offline Windows release-signing GUI.
 - Matching AnyPS5 source and GPL-2.0-only license notices, plus SHA-256 checksums.
 
-The desktop shell now includes a separate **KytyPS5 launch tab**. It can locate a user-installed upstream `kyty_emulator.exe`, validate a local game directory containing `eboot.bin` or a supported ELF/ZArchive path, and launch the official engine as a separate process. KytyPS5 itself is **not included, copied, modified, or linked** in this Builder package. The AnyPS5 relinker remains a separate experimental utility and is not a complete PS5 emulator.
+The desktop shell now includes a **KytyPS5 launch tab**. The current preview still asks the user to select an engine folder, but this is only an intermediate development state. The required release experience is one PS5 Windows Hub installer containing a pinned KytyPS5 Windows runtime under `Engine/KytyPS5/`; users must not need to download or install Kyty separately. Bundled-runtime packaging and its corresponding-source delivery are not implemented or verified yet. Any distributed KytyPS5 runtime must comply with GPL-2.0-only, including notices and complete corresponding-source availability. The AnyPS5 relinker remains a separate experimental utility and is not a complete PS5 emulator.
 
 The workflow runs relinker tests, updater security tests, Kyty process-launch validation tests, offline signing-tool tests, and updater install/rollback integration tests. Run #170 is currently queued pending an available self-hosted Windows runner; no result is claimed for the new integration until that run executes.
 
