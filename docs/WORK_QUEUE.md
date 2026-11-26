@@ -44,9 +44,8 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
 ## P1 — hardening
 
 6. **Complete persistent user-data preservation coverage**
-   - Status: partial, with application settings persistence now implemented. The desktop app stores its selected Kyty directory, game input, relinker input and output in versioned JSON at `%LOCALAPPDATA%\\PS5WindowsHub\\settings.json`; writes use a temporary file and atomic replacement, and corrupt/unknown-schema settings safely fall back to defaults.
-   - Automated coverage now verifies exact settings round-trip plus corrupt-file and unsupported-schema recovery. The updater transaction workflow separately verifies an external user-data sentinel survives successful directory swap and failed-update rollback.
-   - Acceptance to close: extend the Windows updater transaction test to seed representative application settings, run update and rollback, then launch/read settings and verify exact values survive both paths.
+   - Status: implemented and covered by automated tests. The desktop app stores its selected Kyty directory, game input, relinker input and output in versioned JSON at `%LOCALAPPDATA%\\PS5WindowsHub\\settings.json`; writes use a temporary file and atomic replacement, and corrupt/unknown-schema settings safely fall back to defaults.
+   - The settings-store tests verify exact round-trip and safe recovery from corrupt/unsupported settings. The Windows updater transaction test seeds representative values at the actual settings path, performs a successful directory swap and a failed-update rollback, then reads the JSON and verifies every setting is unchanged after both operations. A separate external user-data sentinel is also checked after both paths.
 
 7. **Add clean-install and upgrade end-to-end automation**
    - Acceptance: Windows CI installs the packaged build in a temporary directory, starts it, validates health, applies a signed test update, and verifies rollback without touching a real user install.
