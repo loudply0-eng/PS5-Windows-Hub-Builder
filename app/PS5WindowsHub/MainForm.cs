@@ -26,7 +26,7 @@ internal sealed class MainForm : Form
     private bool conversionInProgress;
     private int updateCheckInProgress;
     private Process? kytyProcess;
-    private const bool EnableSecureUpdates = true; // Do not change until release signing and end-to-end update tests are complete.
+    private static readonly bool EnableSecureUpdates = true; // Do not change until release signing and end-to-end update tests are complete.
     private string Relinker => Path.Combine(AppContext.BaseDirectory, "relinker.exe");
 
     public MainForm()
