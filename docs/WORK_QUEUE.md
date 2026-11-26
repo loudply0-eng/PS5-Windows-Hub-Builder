@@ -48,24 +48,24 @@ This is the working backlog for the Builder preview and the linked ABRJ Core pro
    - The settings-store tests verify exact round-trip and safe recovery from corrupt/unsupported settings. The Windows updater transaction test seeds representative values at the actual settings path, performs a successful directory swap and a failed-update rollback, then reads the JSON and verifies every setting is unchanged after both operations. A separate external user-data sentinel is also checked after both paths.
 
 7. **Reject reparse points in updater paths and clean backups without traversing links**
-   - Status: ancestor validation and both Windows Junction rejection cases passed on the latest validated head before this follow-up. The recursive backup-cleanup hardening and its nested-Junction sentinel test are now implemented; validation is pending the next Windows CI run.
-   - Scope already validated: checks every existing directory component from the volume root through staging, payload, installation and installation parent; verifies payload containment using a relative path; rejects a reparse-point application executable; and rejects payload/install paths that traverse Junction ancestors. The same run passed successful update, corrupted-update rollback, settings preservation, and external user-data preservation.
-   - New change awaiting CI: old-backup cleanup now recursively removes ordinary files/directories while deleting nested reparse points as links, never descending into their targets. The Windows integration test seeds an old backup with a nested Junction and asserts that its external sentinel survives cleanup.
+   - Status: implemented and validated on Windows CI run [45848446282](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45848446282), exact head `561649c665c0720fde65a42493e9cf67d000ad31`; build, relinker tests, updater security tests, signing tests, updater transaction tests and SHA-256 checks all passed.
+   - Coverage: validates every existing directory component from the volume root through staging, payload, installation and installation parent; verifies payload containment using a relative path; rejects a reparse-point application executable; and rejects payload/install paths that traverse Junction ancestors.
+   - The same Windows transaction run created an old backup containing a nested Junction, removed that backup tree without traversing the link, verified the external sentinel remained intact, and passed successful update, failed-health-check rollback, settings preservation and user-data preservation.
    - Limitation: path validation is not a complete defence against a hostile same-user process racing filesystem changes between validation and use (TOCTOU).
 
 8. **Add clean-install and upgrade end-to-end automation**
    - Acceptance: Windows CI installs the packaged build in a temporary directory, starts it, validates health, applies a signed test update, and verifies rollback without touching a real user install.
 
-8. **Decide on Authenticode signing**
+9. **Decide on Authenticode signing**
    - Status: not implemented.
    - Acceptance: document publisher identity/certificate requirements and sign release executables if a legitimate code-signing certificate is obtained. ECDSA update metadata signatures are not Authenticode and do not remove SmartScreen warnings.
 
 10. **Review GitHub repository security settings**
    - Acceptance: directly verify main-branch ruleset, required checks, least-privilege Actions permissions, Dependabot alerts/security updates, secret scanning and push protection where available. Do not infer settings from workflow files.
 
-11. **Resolve ABRJ Core CI startup failure**
-    - Status: blocked on actionable GitHub runner diagnostics. Latest run [45804983367](https://github.com/loudply0-eng/PS5-Windows-Hub-Core/actions/runs/45804983367) failed before exposing any job steps; job-step retrieval returned an empty list and log retrieval was unavailable. The cause is not established; do not label it a source-code failure.
-    - Acceptance: obtain runner/job initialization diagnostics, fix the actual cause, then pass configure, build and CTest on Windows.
+11. **Resolve ABRJ Core Actions runner allocation failure**
+    - Status: blocked outside the source build. Recent runs [45849669044](https://github.com/loudply0-eng/PS5-Windows-Hub-Core/actions/runs/45849669044) (PR) and [45849659273](https://github.com/loudply0-eng/PS5-Windows-Hub-Core/actions/runs/45849659273) (push) both failed before workflow steps. Each attempted both `windows-latest` and `ubuntu-latest`; all four jobs had `runner_id: 0`, blank runner names, empty step lists and no downloadable job logs. This is not evidence of a C++ compile or test failure; exact account/repository-side cause remains unknown.
+    - Acceptance: restore Actions runner allocation for the private Core repository, then pass Windows configure/build/CTest and portable Linux configure/build/CTest on the current process-adapter code.
 
 ## P2 — real engine development (not a preview promise)
 
