@@ -1,1 +1,1 @@
-Trigger the verified publication job for the signed v0.1.1 release. The manifest bytes and ECDSA signature are fetched from this repository without line-ending conversion; the release job uses the exact earlier CI artifact whose hash is signed.
+Retry the verified v0.1.1 release publisher after switching to a checkout with line-ending conversion disabled. The manifest and signature remain byte-for-byte unchanged and correspond to the original successful CI artifact.
