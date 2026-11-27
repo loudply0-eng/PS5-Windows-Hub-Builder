@@ -7,7 +7,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PS5-Windows-Hub-Release-Signer</AssemblyName>
     <RootNamespace>PS5WindowsHubReleaseSigner</RootNamespace>
-    <Product>PS5 WINDOWS HUB — OFFLINE RELEASE SIGNER</Product>
-    <Version>1.0.0</Version>
+    <Product>PS5 WINDOWS HUB — ONE-FILE RELEASE SIGNER</Product>
+    <Version>1.1.0</Version>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(ReleaseAssetPath)' != '' and Exists('$(ReleaseAssetPath)')">
+    <EmbeddedResource Include="$(ReleaseAssetPath)"
+                      LogicalName="PS5WindowsHubReleaseSigner.ReleaseAsset.zip" />
+  </ItemGroup>
+
+  <Target Name="ValidateEmbeddedReleaseAsset" BeforeTargets="PrepareForBuild"
+          Condition="'$(RequireEmbeddedReleaseAsset)' == 'true'">
+    <Error Condition="'$(ReleaseAssetPath)' == ''"
+           Text="ReleaseAssetPath must point to the versioned update ZIP." />
+    <Error Condition="!Exists('$(ReleaseAssetPath)')"
+           Text="The versioned update ZIP was not found at ReleaseAssetPath." />
+  </Target>
 </Project>
