@@ -535,8 +535,8 @@ jobs:
           $assetName = "PS5-Windows-Hub-$version.zip"
           $assetPath = Join-Path $env:SIGNED_BUNDLE_ROOT $assetName
           $setupPath = Join-Path $env:SIGNED_BUNDLE_ROOT "PS5-Windows-Hub-Setup-$version.exe"
-          foreach ($path in @($manifestPath,$signaturePath,$assetPath,$setupPath)) {
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required signed release file is missing: $path" }
+          foreach ($path in @($assetPath,$setupPath)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required original CI asset is missing: $path" }
           }
 
           $headers = @{
@@ -549,6 +549,9 @@ jobs:
           $signatureResponse = Invoke-RestMethod -Uri "$apiRoot/$signaturePath?ref=$env:GITHUB_SHA" -Headers $headers
           $manifestBytes = [Convert]::FromBase64String(($manifestResponse.content -replace '\s',''))
           $signatureFileBytes = [Convert]::FromBase64String(($signatureResponse.content -replace '\s',''))
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $manifestPath) | Out-Null
+          [System.IO.File]::WriteAllBytes($manifestPath,$manifestBytes)
+          [System.IO.File]::WriteAllBytes($signaturePath,$signatureFileBytes)
           $manifest = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
           $expectedUrl = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v$version/$assetName"
           if ($manifest.version -ne $version -or
