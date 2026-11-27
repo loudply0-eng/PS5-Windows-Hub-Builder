@@ -410,8 +410,16 @@ jobs:
           if (-not (Test-Path $legacyMarker) -or [System.IO.File]::ReadAllText($legacyMarker) -cne 'preserve existing user file') {
             throw 'Installer did not preserve the pre-existing install-folder user file.'
           }
-          if ([System.IO.File]::ReadAllText($settingsPath) -cne $settingsBefore) {
-            throw 'Installer changed application settings outside the install folder.'
+          $settingsAfter = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+          $settingsOriginal = $settingsBefore | ConvertFrom-Json
+          foreach ($property in @('GameInput','RelinkerInput','RelinkerOutput')) {
+            if ([string]$settingsAfter.$property -cne [string]$settingsOriginal.$property) {
+              throw "Installer or startup changed the saved $property setting."
+            }
+          }
+          $expectedBundledEngine = Join-Path $installDir 'Engine/KytyPS5'
+          if ([string]$settingsAfter.KytyDirectory -cne $expectedBundledEngine) {
+            throw 'First launch did not persist the automatically selected bundled KytyPS5 runtime.'
           }
           if (-not (Test-Path (Join-Path $installDir 'Engine/KytyPS5/kyty_emulator.exe'))) {
             throw 'Installer did not include the pinned KytyPS5 Windows runtime.'
