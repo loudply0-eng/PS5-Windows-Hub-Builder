@@ -1,37 +1,37 @@
-# PS5 Windows Hub — Offline Release Signer
+# PS5 Windows Hub — One-file Offline Release Signer
 
-This Windows GUI signs update metadata locally. It has no network client and does not upload the private key, passphrase, manifest, signature, or update ZIP.
+The Windows signer is published as one self-contained EXE. The exact version 0.1.1 update ZIP is embedded inside that EXE, so no separate ZIP, manual file selection, or network connection is required.
 
-## What it does
+## Run it
 
-- Opens the encrypted ECDSA P-256 private key selected on this PC.
-- Confirms that its public key exactly matches the trust anchor embedded in the Windows application.
-- Calculates the update ZIP size and SHA-256.
-- Creates the exact `manifest.json` bytes and signs them with ECDSA P-256/SHA-256.
-- Verifies the signature locally before writing `manifest.json` and `manifest.sig.base64`.
+1. Download and extract the GitHub Actions artifact named `PS5-Windows-Hub-OneClick-Signer-0.1.1`.
+2. Run `PS5-Windows-Hub-Release-Signer.exe` on the Windows PC that already contains the encrypted signing key.
+3. The tool automatically detects:
+   - The embedded update package `PS5-Windows-Hub-0.1.1.zip`.
+   - Version `0.1.1` and minimum supported version `0.1.0`.
+   - The local encrypted key at `%LOCALAPPDATA%\PS5WindowsHub\SigningKeys\ecdsa-p256-private-encrypted.pem`.
+   - The output folder `Desktop\PS5WindowsHub-SignedRelease`.
+4. Enter only the key passphrase and click **إنشاء ملفات التوقيع**.
+5. The tool checks the embedded ZIP contents, verifies that the local key matches the application's trusted public key, hashes the exact embedded ZIP, signs the manifest, verifies the generated signature, saves both files, and opens the output folder.
 
-The passphrase is used only in memory for the signing operation and the password field is cleared afterward. The private key is never copied into the repository or release output.
+The output contains exactly the public release metadata files:
 
-## First bootstrap release
+- `manifest.json`
+- `manifest.sig.base64`
 
-The first update-enabled application build is planned as version `0.1.1`, with minimum supported version `0.1.0`.
+## Security properties
 
-1. Download and extract the `PS5-Windows-Hub-Preview` workflow artifact.
-2. Use the ZIP named `PS5-Windows-Hub-0.1.1.zip` in this GUI.
-3. Keep version `0.1.1` and minimum supported version `0.1.0` for the first bootstrap release.
-4. Select the encrypted key file. The default path is:
-   `%LOCALAPPDATA%\PS5WindowsHub\SigningKeys\ecdsa-p256-private-encrypted.pem`
-5. Enter the key passphrase locally and select **Create signature files**.
-6. Attach the generated `manifest.json` and `manifest.sig.base64` plus the exact ZIP to GitHub Release `v0.1.1`, along with the matching source archive and license from the build artifact.
-7. Install the update-enabled `0.1.1` package once.
+- The encrypted private key never leaves the user's PC.
+- The passphrase is used only in memory for the signing operation and is cleared afterward.
+- The signer has no network client and does not upload the key, passphrase, manifest, signature, or update ZIP.
+- The update ZIP is embedded as a resource in the signer EXE and is read directly for hashing. It is not extracted to a temporary folder.
+- The signer checks the ECDSA P-256 key against the public trust anchor embedded in the application.
+- The output signature is verified locally before the two output files are written.
 
-The existing `0.1.0` preview has automatic updates intentionally disabled, so it cannot bootstrap itself. After the first update-enabled package is installed and its signed release is published, later app updates are checked automatically at startup and every six hours while the app is open. The app verifies the signature and SHA-256, waits for an active conversion to finish, installs without a confirmation prompt, rolls back if the new build fails its health check, and restarts itself.
+## Release publication
 
-## Important
+The signer prepares the two signed metadata files only. Publishing GitHub Release `v0.1.1` and attaching the exact update ZIP, `manifest.json`, and `manifest.sig.base64` remains a separate release-publishing step. Do not edit or reformat `manifest.json` after signing.
 
-- Never share the passphrase or private key with anyone.
-- Do not upload the private key to GitHub, GitHub Actions secrets, Oracle, or this repository.
-- Never edit or reformat `manifest.json` after it has been signed.
-- The release ZIP must be named exactly `PS5-Windows-Hub-{version}.zip`.
-- The release tag and asset URL are pinned to this repository and version.
-- The signer only prepares the signature files. Publishing the release is a separate maintainer action.
+The existing `0.1.0` preview has automatic updates disabled. Version `0.1.1` is the bootstrap build that enables the signed update path after its release assets are published.
+
+Never share the encrypted private key or its passphrase.
