@@ -511,12 +511,6 @@ jobs:
       actions: read
       contents: write
     steps:
-      - name: Checkout signed release metadata
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
       - name: Download exact CI artifact that was signed
         shell: pwsh
         env:
@@ -545,7 +539,16 @@ jobs:
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required signed release file is missing: $path" }
           }
 
-          $manifestBytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $manifestPath))
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $apiRoot = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/contents"
+          $manifestResponse = Invoke-RestMethod -Uri "$apiRoot/$manifestPath?ref=$env:GITHUB_SHA" -Headers $headers
+          $signatureResponse = Invoke-RestMethod -Uri "$apiRoot/$signaturePath?ref=$env:GITHUB_SHA" -Headers $headers
+          $manifestBytes = [Convert]::FromBase64String(($manifestResponse.content -replace '\s',''))
+          $signatureFileBytes = [Convert]::FromBase64String(($signatureResponse.content -replace '\s',''))
           $manifest = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
           $expectedUrl = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v$version/$assetName"
           if ($manifest.version -ne $version -or
@@ -562,7 +565,8 @@ jobs:
             throw "Signed manifest does not match its original CI asset. size=$($assetInfo.Length) sha256=$actualHash"
           }
 
-          $signature = [Convert]::FromBase64String(([System.IO.File]::ReadAllText($signaturePath)).Trim())
+          $signatureText = [System.Text.Encoding]::UTF8.GetString($signatureFileBytes).Trim()
+          $signature = [Convert]::FromBase64String($signatureText)
           $publicKey = [Convert]::FromBase64String('MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEijzMLeIFygR8rMMlITN1rfCHTncbjih/+N4uWikQG4y2v+XPS8iuh5w+STGLKG0zBw8oiZw2GwH7cyh/sdRajg==')
           $trustedFingerprint = '773d9d46e3f8904cacdf4b4bcf0ac415db529c2dc11d1b827cc3ca1edb2bca6d'
           $actualFingerprint = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($publicKey)).ToLowerInvariant()
