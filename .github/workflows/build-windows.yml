@@ -466,3 +466,46 @@ jobs:
           path: dist/PS5-Windows-Hub-Setup-0.1.1.exe
           if-no-files-found: error
           retention-days: 7
+
+      - name: Prepare offline signing package
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = 'dist/OfflineSigning'
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          Copy-Item 'dist/ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe' $package
+          Copy-Item 'dist/PS5-Windows-Hub-0.1.1.zip' $package
+          Copy-Item 'dist/SHA256SUMS.txt' $package
+          $instructions = @'
+          PS5 WINDOWS HUB — OFFLINE RELEASE SIGNING (0.1.1)
+
+          1. Extract this entire folder. Keep the signer EXE and PS5-Windows-Hub-0.1.1.zip together.
+          2. Run PS5-Windows-Hub-Release-Signer.exe on the Windows PC that already contains your encrypted signing key.
+          3. Confirm the detected key path is:
+             %LOCALAPPDATA%\PS5WindowsHub\SigningKeys\ecdsa-p256-private-encrypted.pem
+          4. Confirm the asset is PS5-Windows-Hub-0.1.1.zip, Version is 0.1.1,
+             and Minimum supported version is 0.1.0. Do not change these release values.
+          5. Enter the key passphrase only into the signer's password field locally.
+          6. Select "Create signature files". The signer verifies that the key matches
+             the public trust anchor embedded in the application and verifies its signature.
+          7. The output folder PS5WindowsHub-SignedRelease will contain:
+             manifest.json
+             manifest.sig.base64
+
+          Keep the encrypted private key and passphrase on this PC. Never upload or send
+          either of them. Only the two generated manifest files are needed for the release.
+          The app ZIP and signer are paired to the same CI build commit.
+          '@
+          [System.IO.File]::WriteAllText((Join-Path $package 'SIGNING-INSTRUCTIONS.txt'), $instructions, [System.Text.UTF8Encoding]::new($false))
+          if (-not (Test-Path (Join-Path $package 'PS5-Windows-Hub-Release-Signer.exe'))) { throw 'Offline signer EXE missing.' }
+          if (-not (Test-Path (Join-Path $package 'PS5-Windows-Hub-0.1.1.zip'))) { throw 'Version 0.1.1 update payload missing.' }
+
+      - name: Upload offline signing package
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PS5-Windows-Hub-Offline-Signing-0.1.1
+          path: dist/OfflineSigning/
+          if-no-files-found: error
+          retention-days: 7
