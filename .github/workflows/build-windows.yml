@@ -617,7 +617,7 @@ jobs:
             $createArgs = @('release','create',$tag) + $assets + @(
               '--repo',$env:GITHUB_REPOSITORY,
               '--title',"PS5 Windows Hub $version",
-              '--target','ed09ed76be1c531569dfb218198f5894c42e41f3',
+              '--target',$env:GITHUB_SHA,
               '--notes',"الإصدار 0.1.1 هو إصدار التأسيس للتحديثات الموقعة تلقائياً. يتضمن تطبيق Windows وحزمة التحديث التي طابقت التوقيع، ومُثبّت Windows، وملفات التحقق والتراخيص والمصادر المطابقة للمكونات المرفقة. تم التحقق من توقيع ECDSA P-256 ومن تطابق SHA-256 والحجم مع حزمة CI الأصلية."
             )
             & gh @createArgs
