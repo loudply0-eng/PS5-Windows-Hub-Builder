@@ -1,1 +1,1 @@
-This marker triggers publication of the signed v0.1.1 release. The signed manifest and signature are stored alongside this file.
+Trigger the verified publication job for the signed v0.1.1 release. The manifest bytes and ECDSA signature are fetched from this repository without line-ending conversion; the release job uses the exact earlier CI artifact whose hash is signed.
