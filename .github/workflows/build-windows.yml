@@ -373,7 +373,7 @@ jobs:
           if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstallProcess.ExitCode)." }
           if (-not (Test-Path $legacyMarker)) { throw 'Uninstaller deleted an unrelated pre-existing user file.' }
           Remove-Item -LiteralPath $installDir -Recurse -Force
-          Write-Host "Installer integration test passed for PS5 Windows Hub $version: install, startup health check, settings preservation, and safe uninstall."
+          Write-Host "Installer integration test passed for PS5 Windows Hub ${version}: install, startup health check, settings preservation, and safe uninstall."
       - name: Generate and verify SHA-256 checksums
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
