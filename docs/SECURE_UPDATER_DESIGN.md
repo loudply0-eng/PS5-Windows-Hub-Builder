@@ -63,3 +63,14 @@ Observed repository state on 2026-11-26 (GitHub API inspection):
 - The inspected tracked file tree did not show a private signing-key file. This does not prove that local key material exists or that GitHub Actions secrets, repository history, or account security settings are clean; those require separate checks.
 
 Therefore the first signed-release gate is complete, but **end-user automatic updating is not yet fully verified** until the 0.1.1 bootstrap installer is installed and a later version-to-version update/rollback is exercised on a real Windows installation. Keep Core private. Never put the private signing key or passphrase in GitHub, Actions secrets, Oracle, or ChatGPT.
+
+
+## Release verification — 2026-11-27
+
+- Public GitHub Release: `v0.1.1` — https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/tag/v0.1.1
+- GitHub's latest-release API resolves to `v0.1.1`; the release is published (not draft and not prerelease).
+- Release workflow run `46061296869` completed successfully. It downloaded the original successful CI artifact `46052343500`, checked the exact manifest bytes and detached signature with the trusted ECDSA P-256 public key, confirmed that the manifest's byte length and SHA-256 match the original update ZIP, and uploaded the matching release assets.
+- Signed update ZIP: `PS5-Windows-Hub-0.1.1.zip`, 170,217,925 bytes, SHA-256 `74f38e5991bdb1e45d22896487bf2f2970da79c497f29d1e7fd5060b5ffff9c0`.
+- The release includes the setup installer, update ZIP, signed manifest, detached signature, SHA-256 inventory, upstream source archives, and their license files.
+- The one-time bootstrap requirement remains: preview version `0.1.0` has auto-updates disabled, so install `PS5-Windows-Hub-Setup-0.1.1.exe` manually. After that, future signed releases can be discovered through the pinned `releases/latest/download` metadata endpoints.
+- Not yet demonstrated: a real installed 0.1.1 client checking the published latest endpoints and applying a later signed version, including rollback after a deliberately failing update. CI integration tests cover the updater transaction and rollback independently, but that is not a substitute for an end-user release-to-release smoke test.
