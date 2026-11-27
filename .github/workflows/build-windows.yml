@@ -103,12 +103,6 @@ jobs:
           set -euo pipefail
           python tests/release-signing-tools/test_release_signing.py
 
-      - name: Build offline release signer GUI
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          dotnet publish tools/PS5WindowsHub.ReleaseSigner/PS5WindowsHub.ReleaseSigner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o release-signer-publish
-
       - name: Publish standalone updater helper
         shell: pwsh
         run: |
@@ -253,8 +247,7 @@ jobs:
         run: |
           set -euo pipefail
           test -f build-relinker/core/relinker/relinker.exe
-          mkdir -p dist/PS5-Windows-Hub dist/ReleaseSigner
-          cp -a release-signer-publish/. dist/ReleaseSigner/
+          mkdir -p dist/PS5-Windows-Hub
           cp build-relinker/core/relinker/relinker.exe dist/relinker.exe
           cp -a app-publish/. dist/PS5-Windows-Hub/
           cp build-relinker/core/relinker/relinker.exe dist/PS5-Windows-Hub/relinker.exe
@@ -277,7 +270,7 @@ jobs:
             'Upstream commit: 62bd7dd61e2b8a7a59262c4c145edff549bae5b9' \
             'License: GPL-2.0-only' \
             'The matching upstream source archive and license are included.' \
-            'Offline release-signing GUI is provided separately in ReleaseSigner/; no private key is included.' \
+            'One-file offline release signer with the exact update ZIP embedded is provided in ReleaseSigner/; no private key is included.' \
             > dist/BUILD-INFO.txt
 
       - name: Bundle pinned official KytyPS5 Windows runtime and corresponding source
@@ -350,6 +343,28 @@ jobs:
               if ($names -notcontains $required) { throw "Update ZIP is missing required root entry: $required" }
             }
           } finally { $archive.Dispose() }
+
+      - name: Build self-contained one-file release signer with embedded update ZIP
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'app/PS5WindowsHub/PS5WindowsHub.csproj'
+          $version = $project.Project.PropertyGroup.Version
+          $assetPath = (Resolve-Path -LiteralPath "dist/PS5-Windows-Hub-$version.zip").Path
+          $releaseAssetProperty = "-p:ReleaseAssetPath=$assetPath"
+          dotnet publish tools/PS5WindowsHub.ReleaseSigner/PS5WindowsHub.ReleaseSigner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:RequireEmbeddedReleaseAsset=true $releaseAssetProperty -o release-signer-publish
+          if ($LASTEXITCODE -ne 0) { throw "One-file signer publish failed: $LASTEXITCODE" }
+          $signer = Join-Path (Resolve-Path 'release-signer-publish').Path 'PS5-Windows-Hub-Release-Signer.exe'
+          if (-not (Test-Path -LiteralPath $signer)) { throw 'Standalone release signer EXE is missing.' }
+          & $signer --verify-bundle
+          if ($LASTEXITCODE -ne 0) { throw 'The release ZIP embedded in the signer failed its integrity/contents check.' }
+          if ((Get-Item -LiteralPath $signer).Length -lt (Get-Item -LiteralPath $assetPath).Length) {
+            throw 'The standalone signer is unexpectedly smaller than the update ZIP it must embed.'
+          }
+          New-Item -ItemType Directory -Force -Path 'dist/ReleaseSigner' | Out-Null
+          Copy-Item -LiteralPath $signer -Destination 'dist/ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe' -Force
+          Write-Host "Verified one-file signer: $((Get-Item -LiteralPath $signer).Length) bytes; embedded payload: $((Get-Item -LiteralPath $assetPath).Length) bytes."
 
       - name: Install pinned Inno Setup compiler
         shell: pwsh
@@ -475,37 +490,14 @@ jobs:
           $package = 'dist/OfflineSigning'
           New-Item -ItemType Directory -Force -Path $package | Out-Null
           Copy-Item 'dist/ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe' $package
-          Copy-Item 'dist/PS5-Windows-Hub-0.1.1.zip' $package
-          Copy-Item 'dist/SHA256SUMS.txt' $package
-          $instructions = @'
-          PS5 WINDOWS HUB — OFFLINE RELEASE SIGNING (0.1.1)
-
-          1. Extract this entire folder. Keep the signer EXE and PS5-Windows-Hub-0.1.1.zip together.
-          2. Run PS5-Windows-Hub-Release-Signer.exe on the Windows PC that already contains your encrypted signing key.
-          3. Confirm the detected key path is:
-             %LOCALAPPDATA%\PS5WindowsHub\SigningKeys\ecdsa-p256-private-encrypted.pem
-          4. Confirm the asset is PS5-Windows-Hub-0.1.1.zip, Version is 0.1.1,
-             and Minimum supported version is 0.1.0. Do not change these release values.
-          5. Enter the key passphrase only into the signer's password field locally.
-          6. Select "Create signature files". The signer verifies that the key matches
-             the public trust anchor embedded in the application and verifies its signature.
-          7. The output folder PS5WindowsHub-SignedRelease will contain:
-             manifest.json
-             manifest.sig.base64
-
-          Keep the encrypted private key and passphrase on this PC. Never upload or send
-          either of them. Only the two generated manifest files are needed for the release.
-          The app ZIP and signer are paired to the same CI build commit.
-          '@
-          [System.IO.File]::WriteAllText((Join-Path $package 'SIGNING-INSTRUCTIONS.txt'), $instructions, [System.Text.UTF8Encoding]::new($false))
-          if (-not (Test-Path (Join-Path $package 'PS5-Windows-Hub-Release-Signer.exe'))) { throw 'Offline signer EXE missing.' }
-          if (-not (Test-Path (Join-Path $package 'PS5-Windows-Hub-0.1.1.zip'))) { throw 'Version 0.1.1 update payload missing.' }
+          if (-not (Test-Path (Join-Path $package 'PS5-Windows-Hub-Release-Signer.exe'))) { throw 'One-file offline signer EXE missing.' }
+          if (Test-Path (Join-Path $package 'PS5-Windows-Hub-0.1.1.zip')) { throw 'The one-file signing package must not require a separate update ZIP.' }
 
       - name: Upload offline signing package
         if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: PS5-Windows-Hub-Offline-Signing-0.1.1
+          name: PS5-Windows-Hub-OneClick-Signer-0.1.1
           path: dist/OfflineSigning/
           if-no-files-found: error
           retention-days: 7
