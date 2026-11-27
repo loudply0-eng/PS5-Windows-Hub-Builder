@@ -457,3 +457,12 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload standalone installer for direct download
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PS5-Windows-Hub-Setup-0.1.1
+          path: dist/PS5-Windows-Hub-Setup-0.1.1.exe
+          if-no-files-found: error
+          retention-days: 7
