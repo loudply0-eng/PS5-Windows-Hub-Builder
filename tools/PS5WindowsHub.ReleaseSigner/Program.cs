@@ -1,11 +1,13 @@
+using System.Diagnostics;
 using System.Drawing;
-using System.Security.Cryptography;
+using System.IO.Compression;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace PS5WindowsHubReleaseSigner;
@@ -13,15 +15,73 @@ namespace PS5WindowsHubReleaseSigner;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static int Main(string[] args)
     {
+        if (args.Length == 1 && string.Equals(args[0], "--verify-bundle", StringComparison.Ordinal))
+            return VerifyEmbeddedBundleForCi();
+
         ApplicationConfiguration.Initialize();
         Application.Run(new SignerForm());
+        return 0;
+    }
+
+    private static int VerifyEmbeddedBundleForCi()
+    {
+        try
+        {
+            using var stream = OpenEmbeddedReleaseAsset();
+            ValidateEmbeddedReleaseAsset(stream);
+            return 0;
+        }
+        catch
+        {
+            return 2;
+        }
+    }
+
+    internal static Stream OpenEmbeddedReleaseAsset()
+    {
+        return Assembly.GetExecutingAssembly().GetManifestResourceStream(
+            SignerForm.EmbeddedReleaseResourceName)
+            ?? throw new InvalidDataException("حزمة الإصدار غير موجودة داخل ملف التوقيع.");
+    }
+
+    internal static void ValidateEmbeddedReleaseAsset(Stream stream)
+    {
+        if (!stream.CanSeek || stream.Length <= 0 || stream.Length > 1024L * 1024 * 1024)
+            throw new InvalidDataException("حجم حزمة الإصدار المضمنة غير صالح.");
+
+        stream.Position = 0;
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        var names = archive.Entries
+            .Select(entry => entry.FullName.Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var required in new[]
+        {
+            "PS5-Windows-Hub.exe",
+            "PS5-Windows-Hub.dll",
+            "PS5WindowsHub.Updater.exe",
+            "relinker.exe",
+            "Engine/KytyPS5/kyty_emulator.exe"
+        })
+        {
+            if (!names.Contains(required))
+                throw new InvalidDataException("حزمة الإصدار المضمنة لا تحتوي الملف المطلوب: " + required);
+        }
+
+        stream.Position = 0;
     }
 }
 
 internal sealed class SignerForm : Form
 {
+    internal const string EmbeddedReleaseResourceName =
+        "PS5WindowsHubReleaseSigner.ReleaseAsset.zip";
+
+    private const string ReleaseVersion = "0.1.1";
+    private const string MinimumSupportedVersion = "0.1.0";
+    private const string AssetName = "PS5-Windows-Hub-0.1.1.zip";
     private const string ExpectedPublicKeyBase64 =
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEijzMLeIFygR8rMMlITN1rfCHTncbjih/+N4uWikQG4y2v+XPS8iuh5w+STGLKG0zBw8oiZw2GwH7cyh/sdRajg==";
     private const string ExpectedFingerprint =
@@ -29,18 +89,15 @@ internal sealed class SignerForm : Form
 
     private readonly TextBox keyPath = new() { ReadOnly = true };
     private readonly TextBox passphrase = new() { UseSystemPasswordChar = true };
-    private readonly TextBox assetPath = new() { ReadOnly = true };
-    private readonly TextBox version = new() { Text = "0.1.1" };
-    private readonly TextBox minimumVersion = new() { Text = "0.1.0" };
+    private readonly TextBox assetInfo = new() { ReadOnly = true, Text = AssetName + " — مضمّن داخل هذا الملف" };
+    private readonly TextBox versionInfo = new() { ReadOnly = true, Text = ReleaseVersion + " (الحد الأدنى " + MinimumSupportedVersion + ")" };
     private readonly TextBox outputPath = new() { ReadOnly = true };
-    private readonly TextBox releaseNotes = new()
-    {
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        Text = "PS5 WINDOWS HUB 0.1.1 — first release with automatic signed updates."
-    };
     private readonly Button signButton = new();
     private readonly Label status = new();
+    private readonly string privateKeyPath = GetDefaultPrivateKeyPath();
+    private readonly string destinationPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+        "PS5WindowsHub-SignedRelease");
 
     private sealed class ReleaseManifest
     {
@@ -55,10 +112,10 @@ internal sealed class SignerForm : Form
 
     internal SignerForm()
     {
-        Text = "PS5 WINDOWS HUB — OFFLINE RELEASE SIGNER";
+        Text = "PS5 WINDOWS HUB — أداة التوقيع التلقائي";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(820, 660);
-        Size = new Size(940, 760);
+        MinimumSize = new Size(760, 560);
+        Size = new Size(820, 610);
         BackColor = Color.FromArgb(16, 20, 29);
         ForeColor = Color.FromArgb(235, 239, 246);
         Font = new Font("Segoe UI", 10F);
@@ -68,67 +125,38 @@ internal sealed class SignerForm : Form
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 10,
-            Padding = new Padding(24),
+            ColumnCount = 2,
+            RowCount = 8,
+            Padding = new Padding(28),
             BackColor = BackColor
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        for (var i = 1; i <= 6; i++) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        for (var i = 1; i <= 5; i++)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(layout);
 
         var heading = new Label
         {
-            Text = "توقيع إصدار PS5 WINDOWS HUB محلياً",
+            Text = "توقيع إصدار PS5 WINDOWS HUB تلقائياً",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight,
             Font = new Font("Segoe UI", 18F, FontStyle.Bold),
             ForeColor = Color.White
         };
         layout.Controls.Add(heading, 0, 0);
-        layout.SetColumnSpan(heading, 3);
+        layout.SetColumnSpan(heading, 2);
 
-        keyPath.Text = GetDefaultPrivateKeyPath();
-        assetPath.Text = FindDefaultAssetPath();
-        if (!string.IsNullOrWhiteSpace(assetPath.Text))
-        {
-            var detectedVersion = Regex.Match(Path.GetFileName(assetPath.Text),
-                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.zip$");
-            if (detectedVersion.Success)
-                version.Text = $"{detectedVersion.Groups[1].Value}.{detectedVersion.Groups[2].Value}.{detectedVersion.Groups[3].Value}";
-        }
-        version.ReadOnly = true;
-        minimumVersion.ReadOnly = true;
-        outputPath.Text = !string.IsNullOrWhiteSpace(assetPath.Text)
-            ? Path.Combine(Path.GetDirectoryName(assetPath.Text)!, "PS5WindowsHub-SignedRelease")
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "PS5WindowsHub-SignedRelease");
-        AddRow(layout, 1, "المفتاح الخاص (يُكتشف تلقائياً)", keyPath, BrowseKey);
-        AddRow(layout, 2, "كلمة مرور المفتاح", passphrase);
-        AddRow(layout, 3, "حزمة الإصدار المكتشفة", assetPath, BrowseAsset);
-        AddRow(layout, 4, "الإصدار المكتشف", version);
-        AddRow(layout, 5, "أقل إصدار مدعوم", minimumVersion);
-        AddRow(layout, 6, "مكان حفظ التوقيع تلقائياً", outputPath, BrowseOutput);
-
-        var notesLabel = new Label
-        {
-            Text = "ملاحظات الإصدار",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = Color.FromArgb(188, 200, 219)
-        };
-        layout.Controls.Add(notesLabel, 0, 7);
-        releaseNotes.Dock = DockStyle.Fill;
-        releaseNotes.BackColor = Color.FromArgb(28, 35, 48);
-        releaseNotes.ForeColor = Color.FromArgb(230, 236, 246);
-        releaseNotes.BorderStyle = BorderStyle.FixedSingle;
-        layout.Controls.Add(releaseNotes, 1, 7);
-        layout.SetColumnSpan(releaseNotes, 2);
+        keyPath.Text = privateKeyPath;
+        outputPath.Text = destinationPath;
+        AddRow(layout, 1, "حزمة الإصدار", assetInfo);
+        AddRow(layout, 2, "رقم الإصدار", versionInfo);
+        AddRow(layout, 3, "المفتاح المحلي المكتشف", keyPath);
+        AddRow(layout, 4, "مكان حفظ النتيجة", outputPath);
+        AddRow(layout, 5, "كلمة مرور المفتاح", passphrase);
 
         var actions = new FlowLayoutPanel
         {
@@ -138,8 +166,8 @@ internal sealed class SignerForm : Form
             BackColor = BackColor
         };
         signButton.Text = "إنشاء ملفات التوقيع";
-        signButton.Width = 210;
-        signButton.Height = 44;
+        signButton.Width = 245;
+        signButton.Height = 46;
         signButton.FlatStyle = FlatStyle.Flat;
         signButton.FlatAppearance.BorderSize = 0;
         signButton.BackColor = Color.FromArgb(35, 105, 210);
@@ -147,49 +175,45 @@ internal sealed class SignerForm : Form
         signButton.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
         signButton.Click += async (_, _) => await SignAsync();
         actions.Controls.Add(signButton);
-        layout.Controls.Add(actions, 0, 8);
-        layout.SetColumnSpan(actions, 3);
+        layout.Controls.Add(actions, 0, 6);
+        layout.SetColumnSpan(actions, 2);
 
         status.Dock = DockStyle.Fill;
         status.TextAlign = ContentAlignment.MiddleRight;
         status.ForeColor = Color.FromArgb(120, 196, 255);
-        status.Text = "المفتاح الخاص يبقى على هذا الجهاز. لا يوجد اتصال بالشبكة أو رفع للمفتاح.";
-        layout.Controls.Add(status, 0, 9);
-        layout.SetColumnSpan(status, 3);
-    }
+        status.Text = File.Exists(privateKeyPath)
+            ? "تم اكتشاف المفتاح والحزمة داخل البرنامج. أدخل كلمة المرور فقط."
+            : "لم يتم العثور على المفتاح في المسار الافتراضي. تأكد من وجوده قبل المتابعة.";
+        layout.Controls.Add(status, 0, 7);
+        layout.SetColumnSpan(status, 2);
 
-    private static string FindDefaultAssetPath()
-    {
-        var candidates = new[]
+        if (!File.Exists(privateKeyPath))
         {
-            AppContext.BaseDirectory,
-            Directory.GetParent(AppContext.BaseDirectory)?.FullName ?? "",
-            Directory.GetParent(Directory.GetParent(AppContext.BaseDirectory)?.FullName ?? "")?.FullName ?? "",
-            Environment.CurrentDirectory
-        }.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var directory in candidates)
-        {
-            var matches = Directory.GetFiles(directory, "PS5-Windows-Hub-*.zip", SearchOption.TopDirectoryOnly)
-                .Where(file => Regex.IsMatch(Path.GetFileName(file),
-                    @"^PS5-Windows-Hub-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.zip$"))
-                .ToArray();
-            if (matches.Length == 1) return matches[0];
+            signButton.Enabled = false;
+            status.ForeColor = Color.FromArgb(255, 145, 120);
         }
-        return "";
+
+        try
+        {
+            using var asset = Program.OpenEmbeddedReleaseAsset();
+            assetInfo.Text = $"{AssetName} — مضمّن ({asset.Length:N0} بايت)";
+            Program.ValidateEmbeddedReleaseAsset(asset);
+        }
+        catch (Exception ex)
+        {
+            signButton.Enabled = false;
+            status.ForeColor = Color.FromArgb(255, 145, 120);
+            status.Text = "حزمة الإصدار داخل البرنامج غير صالحة: " + ex.Message;
+        }
     }
 
     private static string GetDefaultPrivateKeyPath()
     {
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var windowsKey = Path.Combine(local, "PS5WindowsHub", "SigningKeys", "ecdsa-p256-private-encrypted.pem");
-        if (File.Exists(windowsKey)) return windowsKey;
-
-        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(profile, ".local", "share", "ps5-windows-hub-signing", "update-signing-private.pem");
+        return Path.Combine(local, "PS5WindowsHub", "SigningKeys", "ecdsa-p256-private-encrypted.pem");
     }
 
-    private static void AddRow(TableLayoutPanel layout, int row, string caption, TextBox editor, Action? browse = null)
+    private static void AddRow(TableLayoutPanel layout, int row, string caption, TextBox editor)
     {
         var label = new Label
         {
@@ -201,118 +225,38 @@ internal sealed class SignerForm : Form
         layout.Controls.Add(label, 0, row);
 
         editor.Dock = DockStyle.Fill;
-        editor.Margin = new Padding(4, 7, 8, 7);
+        editor.Margin = new Padding(4, 8, 8, 8);
         editor.BackColor = Color.FromArgb(28, 35, 48);
         editor.ForeColor = Color.FromArgb(230, 236, 246);
         editor.BorderStyle = BorderStyle.FixedSingle;
         editor.RightToLeft = RightToLeft.No;
         layout.Controls.Add(editor, 1, row);
-
-        if (browse is null) return;
-        var button = new Button
-        {
-            Text = "استعراض",
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 7, 0, 7),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(45, 57, 76),
-            ForeColor = Color.White,
-            Cursor = Cursors.Hand
-        };
-        button.FlatAppearance.BorderSize = 0;
-        button.Click += (_, _) => browse();
-        layout.Controls.Add(button, 2, row);
-    }
-
-    private void BrowseKey()
-    {
-        using var dialog = new OpenFileDialog
-        {
-            Title = "اختر المفتاح الخاص المشفر",
-            Filter = "PEM files (*.pem)|*.pem|All files (*.*)|*.*",
-            CheckFileExists = true
-        };
-        if (dialog.ShowDialog(this) == DialogResult.OK) keyPath.Text = dialog.FileName;
-    }
-
-    private void BrowseAsset()
-    {
-        using var dialog = new OpenFileDialog
-        {
-            Title = "اختر حزمة التحديث ZIP",
-            Filter = "PS5 Windows Hub update (*.zip)|PS5-Windows-Hub-*.zip",
-            CheckFileExists = true
-        };
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            var detectedVersion = Regex.Match(Path.GetFileName(dialog.FileName),
-                @"^PS5-Windows-Hub-(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.]zip$");
-            if (!detectedVersion.Success)
-            {
-                MessageBox.Show(this, "اسم الحزمة يجب أن يكون PS5-Windows-Hub-X.Y.Z.zip.", "حزمة غير صالحة",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            assetPath.Text = dialog.FileName;
-            version.Text = $"{detectedVersion.Groups[1].Value}.{detectedVersion.Groups[2].Value}.{detectedVersion.Groups[3].Value}";
-            if (string.IsNullOrWhiteSpace(outputPath.Text))
-                outputPath.Text = Path.Combine(Path.GetDirectoryName(dialog.FileName)!, "PS5WindowsHub-SignedRelease");
-        }
-    }
-
-    private void BrowseOutput()
-    {
-        using var dialog = new FolderBrowserDialog
-        {
-            Description = "اختر مجلد حفظ manifest.json و manifest.sig.base64",
-            UseDescriptionForTitle = true,
-            ShowNewFolderButton = true
-        };
-        if (Directory.Exists(outputPath.Text)) dialog.SelectedPath = outputPath.Text;
-        if (dialog.ShowDialog(this) == DialogResult.OK) outputPath.Text = dialog.SelectedPath;
     }
 
     private async Task SignAsync()
     {
         signButton.Enabled = false;
-        status.Text = "جاري فحص المفتاح والحزمة وتوقيع بيانات الإصدار محلياً...";
+        status.Text = "جاري فحص المفتاح المضمن وحزمة الإصدار...";
         var password = passphrase.Text.ToCharArray();
         passphrase.Clear();
 
         try
         {
-            var releaseVersion = version.Text.Trim();
-            var minimum = minimumVersion.Text.Trim();
-            if (!IsStableVersion(releaseVersion, out var parsedVersion) ||
-                !IsStableVersion(minimum, out var parsedMinimum) ||
-                parsedMinimum > parsedVersion)
-                throw new InvalidDataException("رقم الإصدار أو أقل إصدار مدعوم غير صالح.");
+            if (!File.Exists(privateKeyPath))
+                throw new FileNotFoundException("لم يتم العثور على المفتاح الخاص المشفر في المسار الافتراضي.");
 
-            var privatePath = Path.GetFullPath(keyPath.Text.Trim());
-            var zipPath = Path.GetFullPath(assetPath.Text.Trim());
-            var destination = Path.GetFullPath(outputPath.Text.Trim());
-            if (!File.Exists(privatePath)) throw new FileNotFoundException("لم يتم العثور على المفتاح الخاص المشفر.");
-            if (!File.Exists(zipPath)) throw new FileNotFoundException("لم أجد حزمة الإصدار بجانب الأداة. ضع الأداة وملف ZIP في مجلد واحد ثم أعد التشغيل.");
-            if (password.Length == 0) throw new InvalidDataException("أدخل عبارة مرور المفتاح محلياً.");
-
-            var expectedAssetName = $"PS5-Windows-Hub-{releaseVersion}.zip";
-            if (!string.Equals(Path.GetFileName(zipPath), expectedAssetName, StringComparison.Ordinal))
-                throw new InvalidDataException($"اسم الحزمة يجب أن يكون {expectedAssetName}.");
-
-            var notes = releaseNotes.Text;
-            if (Encoding.UTF8.GetByteCount(notes) > 16 * 1024)
-                throw new InvalidDataException("ملاحظات الإصدار تتجاوز الحد المسموح (16 KiB).");
+            if (password.Length == 0)
+                throw new InvalidDataException("أدخل عبارة مرور المفتاح.");
 
             using var signingKey = ECDsa.Create();
             try
             {
-                var encryptedPem = await File.ReadAllTextAsync(privatePath);
+                var encryptedPem = await File.ReadAllTextAsync(privateKeyPath);
                 signingKey.ImportFromEncryptedPem(encryptedPem, password.AsSpan());
             }
             catch (CryptographicException)
             {
-                throw new CryptographicException("تعذر فتح المفتاح. تحقق من عبارة المرور وصيغة المفتاح المشفر.");
+                throw new CryptographicException("تعذر فتح المفتاح. تحقق من عبارة المرور.");
             }
 
             if (signingKey.KeySize != 256 ||
@@ -324,28 +268,27 @@ internal sealed class SignerForm : Form
             var actualFingerprint = Convert.ToHexString(SHA256.HashData(actualPublic)).ToLowerInvariant();
             if (!string.Equals(actualFingerprint, ExpectedFingerprint, StringComparison.Ordinal) ||
                 !CryptographicOperations.FixedTimeEquals(actualPublic, expectedPublic))
-                throw new CryptographicException("هذا المفتاح لا يطابق مفتاح التحقق الموثوق المضمّن في التطبيق.");
+                throw new CryptographicException("المفتاح الموجود على هذا الجهاز لا يطابق مفتاح التحقق الموثوق داخل التطبيق.");
 
-            var info = new FileInfo(zipPath);
-            if (info.Length <= 0 || info.Length > 1024L * 1024 * 1024)
-                throw new InvalidDataException("حجم حزمة التحديث خارج الحد المسموح.");
-
-            await using var package = new FileStream(
-                zipPath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using var package = Program.OpenEmbeddedReleaseAsset();
+            Program.ValidateEmbeddedReleaseAsset(package);
+            package.Position = 0;
+            var sizeBytes = package.Length;
             var digest = await SHA256.HashDataAsync(package);
             var sha256 = Convert.ToHexString(digest).ToLowerInvariant();
-            var assetUrl = $"https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v{releaseVersion}/{expectedAssetName}";
+            var assetUrl =
+                "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v" +
+                ReleaseVersion + "/" + AssetName;
 
             var manifest = new ReleaseManifest
             {
-                Version = releaseVersion,
-                MinimumSupportedVersion = minimum,
-                AssetName = expectedAssetName,
+                Version = ReleaseVersion,
+                MinimumSupportedVersion = MinimumSupportedVersion,
+                AssetName = AssetName,
                 AssetUrl = assetUrl,
-                SizeBytes = info.Length,
+                SizeBytes = sizeBytes,
                 Sha256 = sha256,
-                ReleaseNotes = notes
+                ReleaseNotes = "إصدار تأسيسي يتضمن التحديث الآلي الآمن ودعم محرك Kyty المرفق."
             };
             var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, new JsonSerializerOptions
             {
@@ -353,7 +296,7 @@ internal sealed class SignerForm : Form
                 WriteIndented = false
             });
             if (manifestBytes.Length is 0 or > 64 * 1024)
-                throw new InvalidDataException("ملف manifest.json خارج الحد المسموح.");
+                throw new InvalidDataException("ملف بيانات الإصدار خارج الحد المسموح.");
 
             var signature = signingKey.SignData(
                 manifestBytes, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
@@ -361,41 +304,39 @@ internal sealed class SignerForm : Form
                 manifestBytes, signature, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence))
                 throw new CryptographicException("فشل التحقق المحلي من التوقيع الناتج.");
 
-            Directory.CreateDirectory(destination);
-            AtomicWrite(Path.Combine(destination, "manifest.json"), manifestBytes);
+            Directory.CreateDirectory(destinationPath);
+            AtomicWrite(Path.Combine(destinationPath, "manifest.json"), manifestBytes);
             AtomicWrite(
-                Path.Combine(destination, "manifest.sig.base64"),
+                Path.Combine(destinationPath, "manifest.sig.base64"),
                 Encoding.ASCII.GetBytes(Convert.ToBase64String(signature)));
 
-            status.Text = $"تم إنشاء manifest والتوقيع بنجاح. SHA-256: {sha256}";
+            status.ForeColor = Color.FromArgb(120, 220, 160);
+            status.Text = "اكتمل التوقيع والتحقق المحلي. بصمة الحزمة: " + sha256;
             MessageBox.Show(
                 this,
-                "تم التوقيع محلياً والتحقق منه. لم تتم قراءة المفتاح خارج هذا الجهاز ولم يتم رفع أي ملف.",
-                "PS5 WINDOWS HUB — Release Signer",
+                "تم إنشاء ملفي التوقيع والتحقق منهما بنجاح.\n\nمكان الحفظ:\n" + destinationPath +
+                "\n\nلم يتم رفع المفتاح أو كلمة المرور أو إرسال أي بيانات عبر الإنترنت.",
+                "اكتمل توقيع الإصدار",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
+
+            Process.Start(new ProcessStartInfo("explorer.exe", "\"" + destinationPath + "\"")
+            {
+                UseShellExecute = false
+            });
         }
         catch (Exception ex)
         {
-            status.Text = "تعذر إنشاء التوقيع. راجع الحقول ومسار المفتاح.";
+            status.ForeColor = Color.FromArgb(255, 145, 120);
+            status.Text = "تعذر إنشاء التوقيع. راجع كلمة المرور والمفتاح.";
             MessageBox.Show(this, ex.Message, "تعذر توقيع الإصدار", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(password.AsSpan()));
             passphrase.Clear();
-            signButton.Enabled = true;
+            signButton.Enabled = File.Exists(privateKeyPath);
         }
-    }
-
-    private static bool IsStableVersion(string value, out Version parsed)
-    {
-        parsed = new Version(0, 0, 0);
-        if (!Regex.IsMatch(value, @"\A(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z", RegexOptions.CultureInvariant))
-            return false;
-        if (!Version.TryParse(value, out var valueParsed) || valueParsed is null) return false;
-        parsed = valueParsed;
-        return true;
     }
 
     private static void AtomicWrite(string targetPath, byte[] bytes)
@@ -408,8 +349,15 @@ internal sealed class SignerForm : Form
         }
         finally
         {
-            try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); }
-            catch { /* best-effort cleanup */ }
+            try
+            {
+                if (File.Exists(temporaryPath))
+                    File.Delete(temporaryPath);
+            }
+            catch
+            {
+                // Best-effort cleanup of the temporary output.
+            }
         }
     }
 }

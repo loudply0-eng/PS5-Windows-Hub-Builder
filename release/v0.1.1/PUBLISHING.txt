@@ -1,0 +1,2 @@
+Retry the verified v0.1.1 release publisher after switching to a checkout with line-ending conversion disabled. The manifest and signature remain byte-for-byte unchanged and correspond to the original successful CI artifact.
+Retry publication by targeting the current workflow head commit while preserving the exact signed CI payload.

@@ -6,6 +6,13 @@ internal static class KytyEngineLauncher
 {
     internal const string EmulatorExecutableName = "kyty_emulator.exe";
 
+    internal static string ResolveBundledEngineDirectory(string? applicationDirectory = null)
+    {
+        var applicationRoot = Path.GetFullPath(applicationDirectory ?? AppContext.BaseDirectory);
+        var bundledDirectory = Path.Combine(applicationRoot, "Engine", "KytyPS5");
+        return File.Exists(Path.Combine(bundledDirectory, EmulatorExecutableName)) ? bundledDirectory : string.Empty;
+    }
+
     internal static string ResolveEmulatorPath(string engineDirectory)
     {
         if (string.IsNullOrWhiteSpace(engineDirectory))

@@ -1,12 +1,15 @@
 name: Build PS5 Windows Hub CI (AnyPS5 relinker preview)
 
 on:
+  push:
+    branches: [feat/persistent-app-settings-20261126]
   workflow_dispatch:
   pull_request:
-    branches: [main, feat/signed-auto-updater-20261124]
+    branches: [main, feat/signed-auto-updater-20261124, ci/github-hosted-windows-20261126]
 
 permissions:
-  contents: read
+  actions: read
+  contents: write
 
 concurrency:
   group: ps5-windows-hub-${{ github.ref }}
@@ -14,7 +17,7 @@ concurrency:
 
 jobs:
   build-windows:
-    if: github.actor == 'loudply0-eng' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.actor == 'loudply0-eng' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'push' || github.event.head_commit.message != 'Publish signed PS5 Windows Hub 0.1.1')
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -81,7 +84,7 @@ jobs:
       - name: Run relinker tests
         run: |
           set -euo pipefail
-          ctest --test-dir build-relinker -L relinker --output-on-failure
+          ctest --test-dir build-relinker -L relinker --output-on-failure --timeout 180
 
       - name: Build PS5 Windows Hub desktop application
         shell: pwsh
@@ -100,12 +103,6 @@ jobs:
         run: |
           set -euo pipefail
           python tests/release-signing-tools/test_release_signing.py
-
-      - name: Build offline release signer GUI
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          dotnet publish tools/PS5WindowsHub.ReleaseSigner/PS5WindowsHub.ReleaseSigner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o release-signer-publish
 
       - name: Publish standalone updater helper
         shell: pwsh
@@ -151,7 +148,57 @@ jobs:
           $userDataSentinelContent = 'PS5 WINDOWS HUB USER DATA MUST SURVIVE UPDATES'
           [System.IO.File]::WriteAllText($userDataSentinel, $userDataSentinelContent)
 
+          # Seed the real application settings location with representative persisted paths.
+          $settingsPath = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/settings.json'
+          $settingsJson = '{"SchemaVersion":1,"KytyDirectory":"C:\\Tools\\Kyty PS5","GameInput":"D:\\Games\\Sample Game","RelinkerInput":"D:\\Games\\eboot.bin","RelinkerOutput":"D:\\Output\\game_windows.exe"}'
+          [System.IO.File]::WriteAllText($settingsPath, $settingsJson)
+          $assertSettingsPreserved = {
+            if (-not (Test-Path $settingsPath)) { throw 'Application settings file was removed by update/rollback.' }
+            $actual = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+            $expected = $settingsJson | ConvertFrom-Json
+            foreach ($name in @('SchemaVersion','KytyDirectory','GameInput','RelinkerInput','RelinkerOutput')) {
+              if ($actual.$name -cne $expected.$name) { throw "Application setting '$name' changed during update/rollback." }
+            }
+          }
+
           $parentPid = '2147483647' # Deliberately nonexistent PID; no parent process can be held open by this CI test.
+
+          # Reject paths whose final directory looks normal but an ancestor is a junction.
+          $junctionPayloadTarget = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Junction-Payload-Target'
+          $junctionPayloadRoot = Join-Path $stageRoot 'ci-payload-parent-junction'
+          $junctionPayload = Join-Path $junctionPayloadRoot 'payload'
+          New-Item -ItemType Directory -Force -Path $junctionPayloadTarget | Out-Null
+          New-Item -ItemType Junction -Path $junctionPayloadRoot -Target $junctionPayloadTarget | Out-Null
+
+          $junctionInstallRoot = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Install-Parent-Junction'
+          New-Item -ItemType Junction -Path $junctionInstallRoot -Target $env:RUNNER_TEMP | Out-Null
+          $junctionInstall = Join-Path $junctionInstallRoot (Split-Path $install -Leaf)
+
+          function Assert-UpdaterRejectsPath($installPath, $payloadPath, $caseName) {
+            $rejectPsi = [System.Diagnostics.ProcessStartInfo]::new()
+            $rejectPsi.FileName = $helper
+            $rejectPsi.UseShellExecute = $false
+            foreach ($arg in @('--install-dir',$installPath,'--payload-dir',$payloadPath,'--parent-pid',"$parentPid")) { $rejectPsi.ArgumentList.Add($arg) }
+            $rejectProcess = [System.Diagnostics.Process]::Start($rejectPsi)
+            if (-not $rejectProcess.WaitForExit(30000)) { $rejectProcess.Kill(); throw "$caseName timed out." }
+            if ($rejectProcess.ExitCode -eq 0) { throw "Updater accepted unsafe path: $caseName" }
+          }
+
+          Assert-UpdaterRejectsPath $install $junctionPayload 'payload path with a junction ancestor'
+          Assert-UpdaterRejectsPath $junctionInstall $payload 'install path with a junction ancestor'
+          Remove-Item -LiteralPath $junctionPayloadRoot -Force
+          Remove-Item -LiteralPath $junctionInstallRoot -Force
+          Remove-Item -LiteralPath $junctionPayloadTarget -Recurse -Force
+
+          # Seed an older backup with a nested junction. Cleanup must remove the
+          # backup tree without deleting or entering the external junction target.
+          $nestedBackup = Join-Path $env:RUNNER_TEMP '.PS5WindowsHub-backup-ci-nested-junction'
+          $nestedBackupTarget = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Backup-Cleanup-Target'
+          $backupSentinel = Join-Path $nestedBackupTarget 'must-survive-cleanup.txt'
+          New-Item -ItemType Directory -Force -Path $nestedBackup,$nestedBackupTarget | Out-Null
+          [System.IO.File]::WriteAllText((Join-Path $nestedBackup 'obsolete.txt'), 'obsolete backup data')
+          [System.IO.File]::WriteAllText($backupSentinel, 'external target must remain untouched')
+          New-Item -ItemType Junction -Path (Join-Path $nestedBackup 'external-link') -Target $nestedBackupTarget | Out-Null
 
           $mutex = [System.Threading.Mutex]::new($false, 'Local\PS5WindowsHub.UpdateTransaction')
           [void]$mutex.WaitOne()
@@ -171,6 +218,12 @@ jobs:
           if (-not (Test-Path (Join-Path $install 'PS5-Windows-Hub.exe'))) { throw 'Updated application executable is missing.' }
           if (-not (Get-ChildItem $env:RUNNER_TEMP -Directory -Filter $backupPattern)) { throw 'Previous-version backup was not retained.' }
           if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Successful update changed or removed application user data.' }
+          & $assertSettingsPreserved
+          if (Test-Path -LiteralPath $nestedBackup) { throw 'Old backup containing a nested junction was not cleaned up.' }
+          if (-not (Test-Path -LiteralPath $backupSentinel) -or [System.IO.File]::ReadAllText($backupSentinel) -cne 'external target must remain untouched') {
+            throw 'Old-backup cleanup traversed or modified the external junction target.'
+          }
+          Remove-Item -LiteralPath $nestedBackupTarget -Recurse -Force
 
           Copy-Item -Path 'app-publish/*' -Destination $badPayload -Recurse -Force
           Copy-Item 'build-relinker/core/relinker/relinker.exe' (Join-Path $badPayload 'relinker.exe')
@@ -187,15 +240,15 @@ jobs:
           $afterRollback = (Get-FileHash (Join-Path $install 'PS5-Windows-Hub.exe') -Algorithm SHA256).Hash
           if ($beforeRollback -ne $afterRollback) { throw 'Failed update did not restore the prior application.' }
           if (-not (Test-Path $userDataSentinel) -or [System.IO.File]::ReadAllText($userDataSentinel) -ne $userDataSentinelContent) { throw 'Failed update or rollback changed or removed application user data.' }
-          Write-Host 'Updater transaction tests passed: isolated production/test binaries, successful swap, rollback, and user-data preservation.'
+          & $assertSettingsPreserved
+          Write-Host 'Updater transaction tests passed: successful swap, rollback, external user-data sentinel, and exact application settings preservation.'
 
       - name: Prepare binaries, corresponding source and checksums
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
           set -euo pipefail
           test -f build-relinker/core/relinker/relinker.exe
-          mkdir -p dist/PS5-Windows-Hub dist/ReleaseSigner
-          cp -a release-signer-publish/. dist/ReleaseSigner/
+          mkdir -p dist/PS5-Windows-Hub
           cp build-relinker/core/relinker/relinker.exe dist/relinker.exe
           cp -a app-publish/. dist/PS5-Windows-Hub/
           cp build-relinker/core/relinker/relinker.exe dist/PS5-Windows-Hub/relinker.exe
@@ -218,11 +271,63 @@ jobs:
             'Upstream commit: 62bd7dd61e2b8a7a59262c4c145edff549bae5b9' \
             'License: GPL-2.0-only' \
             'The matching upstream source archive and license are included.' \
-            'Offline release-signing GUI is provided separately in ReleaseSigner/; no private key is included.' \
+            'One-file offline release signer with the exact update ZIP embedded is provided in ReleaseSigner/; no private key is included.' \
             > dist/BUILD-INFO.txt
 
+      - name: Bundle pinned official KytyPS5 Windows runtime and corresponding source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseTag = 'KytyPS5-2026-11-26-61db2f8'
+          $releaseCommit = '61db2f8874d4a94fd2908a87cefa973ddc48ef6e'
+          $expectedArchiveHash = '62ce0e4aeec898e14646e550367b89c89939d4770bf31b1ba83ae9acc52569c0'
+          $upstreamArchive = Join-Path $env:RUNNER_TEMP "$releaseTag-Windows-x64.zip"
+          $upstreamUrl = "https://github.com/KytyPS5/KytyPS5/releases/download/$releaseTag/$releaseTag-Windows-x64.zip"
+          Invoke-WebRequest -Uri $upstreamUrl -OutFile $upstreamArchive
+          $actualArchiveHash = (Get-FileHash $upstreamArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualArchiveHash -ne $expectedArchiveHash) {
+            throw "KytyPS5 upstream Windows archive SHA-256 mismatch: $actualArchiveHash"
+          }
+
+          $engineDirectory = 'dist/PS5-Windows-Hub/Engine/KytyPS5'
+          New-Item -ItemType Directory -Force -Path $engineDirectory | Out-Null
+          Expand-Archive -LiteralPath $upstreamArchive -DestinationPath $engineDirectory -Force
+          $emulator = Join-Path $engineDirectory 'kyty_emulator.exe'
+          if (-not (Test-Path $emulator)) { throw 'Pinned KytyPS5 archive is missing kyty_emulator.exe.' }
+          $emulatorBytes = [System.IO.File]::ReadAllBytes($emulator)
+          if ($emulatorBytes.Length -lt 2 -or $emulatorBytes[0] -ne 0x4D -or $emulatorBytes[1] -ne 0x5A) {
+            throw 'Bundled KytyPS5 emulator is not a Windows PE executable.'
+          }
+
+          $sourceDirectory = Join-Path $env:RUNNER_TEMP 'KytyPS5-corresponding-source'
+          & git clone --depth 1 --branch $releaseTag --recurse-submodules https://github.com/KytyPS5/KytyPS5.git $sourceDirectory
+          if ($LASTEXITCODE -ne 0) { throw "KytyPS5 recursive source checkout failed: $LASTEXITCODE" }
+          $actualCommit = (& git -C $sourceDirectory rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $releaseCommit) {
+            throw "KytyPS5 source commit mismatch: $actualCommit"
+          }
+          $submoduleStatus = @(& git -C $sourceDirectory submodule status --recursive)
+          if ($LASTEXITCODE -ne 0 -or ($submoduleStatus | Where-Object { $_ -match '^[+\-U]' })) {
+            throw 'KytyPS5 source submodules are missing or not at their pinned commits.'
+          }
+
+          $sourceArchive = "dist/$releaseTag-source.zip"
+          python scripts/package_kyty_source.py --source $sourceDirectory --output $sourceArchive
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $sourceArchive)) {
+            throw 'KytyPS5 complete corresponding-source archive could not be created.'
+          }
+          Copy-Item (Join-Path $sourceDirectory 'LICENSE') 'dist/LICENSE-KytyPS5.txt' -Force
+          Add-Content -Path 'dist/BUILD-INFO.txt' -Value @(
+            'KytyPS5 runtime: unmodified official Windows x64 release'
+            "KytyPS5 upstream tag: $releaseTag"
+            "KytyPS5 upstream source commit: $releaseCommit"
+            "KytyPS5 upstream Windows archive SHA-256: $actualArchiveHash"
+            "KytyPS5 recursive corresponding source: $([System.IO.Path]::GetFileName($sourceArchive))"
+          )
+          Write-Host "Bundled verified KytyPS5 runtime from $releaseTag with recursive corresponding source."
+
       - name: Create versioned update payload ZIP
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -235,25 +340,290 @@ jobs:
           $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $asset))
           try {
             $names = @($archive.Entries | ForEach-Object { $_.FullName })
-            foreach ($required in @('PS5-Windows-Hub.exe','PS5-Windows-Hub.dll','PS5WindowsHub.Updater.exe','relinker.exe')) {
+            foreach ($required in @('PS5-Windows-Hub.exe','PS5-Windows-Hub.dll','PS5WindowsHub.Updater.exe','relinker.exe','Engine/KytyPS5/kyty_emulator.exe')) {
               if ($names -notcontains $required) { throw "Update ZIP is missing required root entry: $required" }
             }
           } finally { $archive.Dispose() }
 
+      - name: Build self-contained one-file release signer with embedded update ZIP
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'app/PS5WindowsHub/PS5WindowsHub.csproj'
+          $version = $project.Project.PropertyGroup.Version
+          $assetPath = (Resolve-Path -LiteralPath "dist/PS5-Windows-Hub-$version.zip").Path
+          $releaseAssetProperty = "-p:ReleaseAssetPath=$assetPath"
+          dotnet publish tools/PS5WindowsHub.ReleaseSigner/PS5WindowsHub.ReleaseSigner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:RequireEmbeddedReleaseAsset=true $releaseAssetProperty -o release-signer-publish
+          if ($LASTEXITCODE -ne 0) { throw "One-file signer publish failed: $LASTEXITCODE" }
+          $signer = Join-Path (Resolve-Path 'release-signer-publish').Path 'PS5-Windows-Hub-Release-Signer.exe'
+          if (-not (Test-Path -LiteralPath $signer)) { throw 'Standalone release signer EXE is missing.' }
+          & $signer --verify-bundle
+          if ($LASTEXITCODE -ne 0) { throw 'The release ZIP embedded in the signer failed its integrity/contents check.' }
+          if ((Get-Item -LiteralPath $signer).Length -lt (Get-Item -LiteralPath $assetPath).Length) {
+            throw 'The standalone signer is unexpectedly smaller than the update ZIP it must embed.'
+          }
+          New-Item -ItemType Directory -Force -Path 'dist/ReleaseSigner' | Out-Null
+          Copy-Item -LiteralPath $signer -Destination 'dist/ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe' -Force
+          Write-Host "Verified one-file signer: $((Get-Item -LiteralPath $signer).Length) bytes; embedded payload: $((Get-Item -LiteralPath $assetPath).Length) bytes."
+
+      - name: Install pinned Inno Setup compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $download = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.1-x64.exe'
+          $installRoot = Join-Path $env:RUNNER_TEMP 'InnoSetup-7.1.1'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe' -OutFile $download
+          $signature = Get-AuthenticodeSignature -FilePath $download
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') {
+            throw "Inno Setup compiler signature verification failed: $($signature.Status) / $($signature.SignerCertificate.Subject)"
+          }
+          $process = Start-Process -FilePath $download -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$installRoot") -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed: $($process.ExitCode)" }
+          $compiler = Join-Path $installRoot 'ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Pinned Inno Setup compiler was not installed.' }
+          "INNO_SETUP_ISCC=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build and integration-test Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'app/PS5WindowsHub/PS5WindowsHub.csproj'
+          $version = $project.Project.PropertyGroup.Version
+          if ($version -ne '0.1.1') { throw "Unexpected app version: $version" }
+          $setup = "dist/PS5-Windows-Hub-Setup-$version.exe"
+          & $env:INNO_SETUP_ISCC "/DAppVersion=$version" 'installer/PS5-Windows-Hub.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed: $LASTEXITCODE" }
+          if (-not (Test-Path $setup)) { throw "Installer output is missing: $setup" }
+
+          $installDir = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Installer-Upgrade-Test'
+          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+          $legacyMarker = Join-Path $installDir 'legacy-user-file.keep'
+          [System.IO.File]::WriteAllText($legacyMarker, 'preserve existing user file')
+          $settingsPath = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/settings.json'
+          if (-not (Test-Path $settingsPath)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $settingsPath) | Out-Null
+            [System.IO.File]::WriteAllText($settingsPath, '{"SchemaVersion":1,"KytyDirectory":"C:\\Tools\\Kyty PS5","GameInput":"D:\\Games\\Sample Game","RelinkerInput":"D:\\Games\\eboot.bin","RelinkerOutput":"D:\\Output\\game_windows.exe"}')
+          }
+          $settingsBefore = [System.IO.File]::ReadAllText($settingsPath)
+
+          $installPsi = [System.Diagnostics.ProcessStartInfo]::new()
+          $installPsi.FileName = (Resolve-Path $setup).Path
+          $installPsi.UseShellExecute = $false
+          foreach ($arg in @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir")) { $installPsi.ArgumentList.Add($arg) }
+          $installProcess = [System.Diagnostics.Process]::Start($installPsi)
+          if (-not $installProcess.WaitForExit(180000)) { $installProcess.Kill(); throw 'Installer integration test timed out.' }
+          if ($installProcess.ExitCode -ne 0) { throw "Installer exited with code $($installProcess.ExitCode)." }
+
+          $healthPsi = [System.Diagnostics.ProcessStartInfo]::new()
+          $healthPsi.FileName = Join-Path $installDir 'PS5-Windows-Hub.exe'
+          $healthPsi.WorkingDirectory = $installDir
+          $healthPsi.UseShellExecute = $false
+          $healthPsi.ArgumentList.Add('--health-check')
+          $healthProcess = [System.Diagnostics.Process]::Start($healthPsi)
+          if (-not $healthProcess.WaitForExit(30000)) { $healthProcess.Kill(); throw 'Installed app health check timed out.' }
+          if ($healthProcess.ExitCode -ne 0) { throw "Installed app health check failed: $($healthProcess.ExitCode)" }
+          if (-not (Test-Path $legacyMarker) -or [System.IO.File]::ReadAllText($legacyMarker) -cne 'preserve existing user file') {
+            throw 'Installer did not preserve the pre-existing install-folder user file.'
+          }
+          $settingsAfter = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+          $settingsOriginal = $settingsBefore | ConvertFrom-Json
+          foreach ($property in @('GameInput','RelinkerInput','RelinkerOutput')) {
+            if ([string]$settingsAfter.$property -cne [string]$settingsOriginal.$property) {
+              throw "Installer or startup changed the saved $property setting."
+            }
+          }
+          $expectedBundledEngine = Join-Path $installDir 'Engine/KytyPS5'
+          if ([string]$settingsAfter.KytyDirectory -cne $expectedBundledEngine) {
+            throw 'First launch did not persist the automatically selected bundled KytyPS5 runtime.'
+          }
+          if (-not (Test-Path (Join-Path $installDir 'Engine/KytyPS5/kyty_emulator.exe'))) {
+            throw 'Installer did not include the pinned KytyPS5 Windows runtime.'
+          }
+          if (-not (Test-Path (Join-Path $installDir 'Licenses/Source/KytyPS5-2026-11-26-61db2f8-source.zip'))) {
+            throw 'Installer did not include the pinned KytyPS5 corresponding source archive.'
+          }
+
+          $uninstaller = Join-Path $installDir 'unins000.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Installer did not register an uninstaller.' }
+          $uninstallPsi = [System.Diagnostics.ProcessStartInfo]::new()
+          $uninstallPsi.FileName = $uninstaller
+          $uninstallPsi.UseShellExecute = $false
+          foreach ($arg in @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART')) { $uninstallPsi.ArgumentList.Add($arg) }
+          $uninstallProcess = [System.Diagnostics.Process]::Start($uninstallPsi)
+          if (-not $uninstallProcess.WaitForExit(120000)) { $uninstallProcess.Kill(); throw 'Uninstaller integration test timed out.' }
+          if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstallProcess.ExitCode)." }
+          if (-not (Test-Path $legacyMarker)) { throw 'Uninstaller deleted an unrelated pre-existing user file.' }
+          Remove-Item -LiteralPath $installDir -Recurse -Force
+          Write-Host "Installer integration test passed for PS5 Windows Hub ${version}: install, startup health check, settings preservation, and safe uninstall."
       - name: Generate and verify SHA-256 checksums
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
           set -euo pipefail
           version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
           test -n "$version"
-          (cd dist && sha256sum BUILDER-COMMIT.txt BUILD-INFO.txt LICENSE-AnyPS5.txt relinker.exe PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
+          (cd dist && sha256sum BUILDER-COMMIT.txt BUILD-INFO.txt LICENSE-AnyPS5.txt LICENSE-KytyPS5.txt KytyPS5-2026-11-26-61db2f8-source.zip relinker.exe "PS5-Windows-Hub-Setup-$version.exe" PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
           (cd dist && sha256sum --check SHA256SUMS.txt)
 
       - name: Upload Windows build artifact
-        if: github.event_name == 'workflow_dispatch' && github.actor == 'loudply0-eng'
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: PS5-Windows-Hub-Preview
           path: dist/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
+
+      - name: Upload standalone installer for direct download
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PS5-Windows-Hub-Setup-0.1.1
+          path: dist/PS5-Windows-Hub-Setup-0.1.1.exe
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Prepare offline signing package
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = 'dist/OfflineSigning'
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          Copy-Item 'dist/ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe' $package
+          if (-not (Test-Path (Join-Path $package 'PS5-Windows-Hub-Release-Signer.exe'))) { throw 'One-file offline signer EXE missing.' }
+          if (Test-Path (Join-Path $package 'PS5-Windows-Hub-0.1.1.zip')) { throw 'The one-file signing package must not require a separate update ZIP.' }
+
+      - name: Upload offline signing package
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PS5-Windows-Hub-OneClick-Signer-0.1.1
+          path: dist/OfflineSigning/
+          if-no-files-found: error
+          retention-days: 7
+
+
+  publish-signed-release:
+    if: github.event_name == 'push' && github.actor == 'loudply0-eng' && github.ref == 'refs/heads/feat/persistent-app-settings-20261126' && github.event.head_commit.message == 'Publish signed PS5 Windows Hub 0.1.1'
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Disable line-ending conversion for signed metadata
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - name: Checkout exact signed metadata bytes
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Download exact CI artifact that was signed
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundleRoot = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Signed-CI-Artifact'
+          New-Item -ItemType Directory -Force -Path $bundleRoot | Out-Null
+          & gh run download 46052343500 --repo $env:GITHUB_REPOSITORY --name PS5-Windows-Hub-Preview --dir $bundleRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the exact CI build artifact paired with the local signature.' }
+          "SIGNED_BUNDLE_ROOT=$bundleRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Verify signature and exact asset bytes, then publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '0.1.1'
+          $manifestPath = 'release/v0.1.1/manifest.json'
+          $signaturePath = 'release/v0.1.1/manifest.sig.base64'
+          $assetName = "PS5-Windows-Hub-$version.zip"
+          $assetPath = Join-Path $env:SIGNED_BUNDLE_ROOT $assetName
+          $setupPath = Join-Path $env:SIGNED_BUNDLE_ROOT "PS5-Windows-Hub-Setup-$version.exe"
+          foreach ($path in @($manifestPath,$signaturePath,$assetPath,$setupPath)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required signed release file is missing: $path" }
+          }
+
+          $manifestBytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $manifestPath))
+          $signatureFileBytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $signaturePath))
+          $manifest = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
+          $expectedUrl = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v$version/$assetName"
+          if ($manifest.version -ne $version -or
+              $manifest.minimum_supported_version -ne '0.1.0' -or
+              $manifest.asset_name -ne $assetName -or
+              $manifest.asset_url -ne $expectedUrl) {
+            throw 'Signed release manifest version, minimum version, asset name or URL is not the approved bootstrap release.'
+          }
+
+          $assetInfo = Get-Item -LiteralPath $assetPath
+          $actualHash = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ([int64]$manifest.size_bytes -ne [int64]$assetInfo.Length -or
+              $manifest.sha256 -cne $actualHash) {
+            throw "Signed manifest does not match its original CI asset. size=$($assetInfo.Length) sha256=$actualHash"
+          }
+
+          $signatureText = [System.Text.Encoding]::UTF8.GetString($signatureFileBytes).Trim()
+          $signature = [Convert]::FromBase64String($signatureText)
+          $publicKey = [Convert]::FromBase64String('MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEijzMLeIFygR8rMMlITN1rfCHTncbjih/+N4uWikQG4y2v+XPS8iuh5w+STGLKG0zBw8oiZw2GwH7cyh/sdRajg==')
+          $trustedFingerprint = '773d9d46e3f8904cacdf4b4bcf0ac415db529c2dc11d1b827cc3ca1edb2bca6d'
+          $actualFingerprint = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($publicKey)).ToLowerInvariant()
+          if ($actualFingerprint -cne $trustedFingerprint) { throw 'Trusted public-key fingerprint mismatch.' }
+
+          $verifier = [System.Security.Cryptography.ECDsa]::Create()
+          try {
+            $bytesRead = 0
+            $verifier.ImportSubjectPublicKeyInfo($publicKey,[ref]$bytesRead)
+            if ($bytesRead -ne $publicKey.Length) { throw 'Unexpected trailing data in the trusted public key.' }
+            $valid = $verifier.VerifyData(
+              $manifestBytes,
+              $signature,
+              [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+              [System.Security.Cryptography.DSASignatureFormat]::Rfc3279DerSequence
+            )
+            if (-not $valid) { throw 'ECDSA P-256 signature verification failed in the release runner.' }
+          } finally {
+            $verifier.Dispose()
+          }
+
+          $assets = @(
+            $assetPath,
+            $setupPath,
+            (Join-Path $env:SIGNED_BUNDLE_ROOT 'AnyPS5-v0.1.5-source.zip'),
+            (Join-Path $env:SIGNED_BUNDLE_ROOT 'LICENSE-AnyPS5.txt'),
+            (Join-Path $env:SIGNED_BUNDLE_ROOT 'KytyPS5-2026-11-26-61db2f8-source.zip'),
+            (Join-Path $env:SIGNED_BUNDLE_ROOT 'LICENSE-KytyPS5.txt'),
+            (Join-Path $env:SIGNED_BUNDLE_ROOT 'BUILD-INFO.txt'),
+            (Join-Path $env:SIGNED_BUNDLE_ROOT 'SHA256SUMS.txt'),
+            $manifestPath,
+            $signaturePath
+          )
+          foreach ($path in $assets) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Release asset is missing: $path" }
+          }
+
+          $tag = "v$version"
+          & gh version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI is unavailable on this runner.' }
+          & gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            $uploadArgs = @('release','upload',$tag) + $assets + @('--repo',$env:GITHUB_REPOSITORY,'--clobber')
+            & gh @uploadArgs
+          } else {
+            $createArgs = @('release','create',$tag) + $assets + @(
+              '--repo',$env:GITHUB_REPOSITORY,
+              '--title',"PS5 Windows Hub $version",
+              '--target',$env:GITHUB_SHA,
+              '--notes',"الإصدار 0.1.1 هو إصدار التأسيس للتحديثات الموقعة تلقائياً. يتضمن تطبيق Windows وحزمة التحديث التي طابقت التوقيع، ومُثبّت Windows، وملفات التحقق والتراخيص والمصادر المطابقة للمكونات المرفقة. تم التحقق من توقيع ECDSA P-256 ومن تطابق SHA-256 والحجم مع حزمة CI الأصلية."
+            )
+            & gh @createArgs
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release creation or asset upload failed.' }
+          & gh release view $tag --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Published release could not be read back from GitHub.' }
+          Write-Host "Verified signed release v$version was published from the exact CI artifact."
+

@@ -82,15 +82,21 @@ internal static class Program
     {
         var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var stagingRoot = Path.GetFullPath(Path.Combine(localData, "PS5WindowsHub", "Updates", "Staging"));
-        var stagingPrefix = Path.TrimEndingDirectorySeparator(stagingRoot) + Path.DirectorySeparatorChar;
-        if (!payloadDirectory.StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase) ||
-            !Directory.Exists(payloadDirectory) ||
-            (File.GetAttributes(payloadDirectory) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("Payload must be a normal directory inside the application's update staging directory.");
+        EnsureNoReparsePointsInDirectoryPath(stagingRoot, "update staging directory");
+        EnsureNoReparsePointsInDirectoryPath(payloadDirectory, "update payload directory");
 
-        if (!Directory.Exists(installDirectory) ||
-            (File.GetAttributes(installDirectory) & FileAttributes.ReparsePoint) != 0 ||
-            !File.Exists(Path.Combine(installDirectory, ApplicationFileName)))
+        var payloadRelativePath = Path.GetRelativePath(stagingRoot, payloadDirectory);
+        if (payloadRelativePath == "." ||
+            Path.IsPathRooted(payloadRelativePath) ||
+            payloadRelativePath == ".." ||
+            payloadRelativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidDataException("Payload must be a child directory inside the application's update staging directory.");
+
+        EnsureNoReparsePointsInDirectoryPath(installDirectory, "application installation directory");
+        var installedApplication = Path.Combine(installDirectory, ApplicationFileName);
+        if (!File.Exists(installedApplication) ||
+            (File.GetAttributes(installedApplication) & FileAttributes.ReparsePoint) != 0 ||
+            (File.GetAttributes(installedApplication) & FileAttributes.Directory) != 0)
             throw new InvalidDataException("The current application installation is invalid.");
 
         var installRoot = Path.GetPathRoot(installDirectory);
@@ -99,6 +105,7 @@ internal static class Program
 
         var parentDirectory = Path.GetDirectoryName(installDirectory)
             ?? throw new InvalidDataException("Invalid application installation path.");
+        EnsureNoReparsePointsInDirectoryPath(parentDirectory, "application installation parent directory");
         var token = Guid.NewGuid().ToString("N");
         var replacementDirectory = Path.Combine(parentDirectory, ".PS5WindowsHub-new-" + token);
         var backupDirectory = Path.Combine(parentDirectory, ".PS5WindowsHub-backup-" + token);
@@ -125,7 +132,11 @@ internal static class Program
             {
                 if (string.Equals(oldBackup, backupDirectory, StringComparison.OrdinalIgnoreCase))
                     continue;
-                try { Directory.Delete(oldBackup, recursive: true); }
+                try
+                {
+                    if ((File.GetAttributes(oldBackup) & FileAttributes.ReparsePoint) == 0)
+                        DeleteDirectoryTreeWithoutFollowingReparsePoints(oldBackup);
+                }
                 catch { /* Keep the new update successful; an older backup may be removed manually. */ }
             }
 
@@ -150,6 +161,75 @@ internal static class Program
         {
             try { if (Directory.Exists(replacementDirectory)) Directory.Delete(replacementDirectory, recursive: true); }
             catch { /* best-effort cleanup */ }
+        }
+    }
+
+    private static void DeleteDirectoryTreeWithoutFollowingReparsePoints(string path)
+    {
+        var attributes = File.GetAttributes(path);
+
+        // Never descend through a junction, symlink, mount point or other reparse point.
+        // A top-level reparse-point backup is skipped by the caller; nested reparse
+        // points are removed as links themselves, without traversing their targets.
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+            return;
+
+        if ((attributes & FileAttributes.Directory) == 0)
+        {
+            File.Delete(path);
+            return;
+        }
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path))
+        {
+            var entryAttributes = File.GetAttributes(entry);
+            if ((entryAttributes & FileAttributes.ReparsePoint) != 0)
+            {
+                if ((entryAttributes & FileAttributes.Directory) != 0)
+                    Directory.Delete(entry, recursive: false);
+                else
+                    File.Delete(entry);
+            }
+            else if ((entryAttributes & FileAttributes.Directory) != 0)
+            {
+                DeleteDirectoryTreeWithoutFollowingReparsePoints(entry);
+            }
+            else
+            {
+                File.Delete(entry);
+            }
+        }
+
+        Directory.Delete(path, recursive: false);
+    }
+
+    private static void EnsureNoReparsePointsInDirectoryPath(string path, string description)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath)
+            ?? throw new InvalidDataException("Invalid " + description + " path.");
+        var current = root;
+
+        if (!Directory.Exists(current))
+            throw new InvalidDataException("The " + description + " path does not exist.");
+        if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("The " + description + " path crosses a reparse point.");
+
+        var components = fullPath[root.Length..].Split(
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var component in components)
+        {
+            current = Path.Combine(current, component);
+            if (!Directory.Exists(current))
+                throw new InvalidDataException("The " + description + " path contains a missing or non-directory component.");
+
+            var attributes = File.GetAttributes(current);
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("The " + description + " path crosses a reparse point.");
+            if ((attributes & FileAttributes.Directory) == 0)
+                throw new InvalidDataException("The " + description + " path contains a non-directory component.");
         }
     }
 

@@ -11,6 +11,25 @@ internal static class KytyEngineLauncherTests
         File.WriteAllText(Path.Combine(engineDirectory, KytyEngineLauncher.EmulatorExecutableName), "test executable");
         File.WriteAllText(Path.Combine(gameDirectory, "eboot.bin"), "test ELF");
 
+        check("bundled Kyty runtime is discovered automatically", () =>
+        {
+            var appDirectory = Path.Combine(testRoot, "Hub App With Spaces");
+            var bundledDirectory = Path.Combine(appDirectory, "Engine", "KytyPS5");
+            Directory.CreateDirectory(bundledDirectory);
+            File.WriteAllText(Path.Combine(bundledDirectory, KytyEngineLauncher.EmulatorExecutableName), "test executable");
+            var resolved = KytyEngineLauncher.ResolveBundledEngineDirectory(appDirectory);
+            if (!string.Equals(resolved, bundledDirectory, StringComparison.OrdinalIgnoreCase))
+                throw new Exception("The bundled Kyty runtime directory was not discovered.");
+        });
+
+        check("missing bundled Kyty runtime is not selected", () =>
+        {
+            var appDirectory = Path.Combine(testRoot, "Hub Without Engine");
+            Directory.CreateDirectory(appDirectory);
+            if (!string.IsNullOrEmpty(KytyEngineLauncher.ResolveBundledEngineDirectory(appDirectory)))
+                throw new Exception("A missing bundled engine was falsely detected.");
+        });
+
         check("Kyty engine resolves the official emulator executable", () =>
         {
             var resolved = KytyEngineLauncher.ResolveEmulatorPath(engineDirectory);
