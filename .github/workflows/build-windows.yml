@@ -8,7 +8,7 @@ on:
     branches: [main, feat/signed-auto-updater-20261124, ci/github-hosted-windows-20261126]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ps5-windows-hub-${{ github.ref }}
@@ -501,3 +501,95 @@ jobs:
           path: dist/OfflineSigning/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Verify signed release metadata and publish v0.1.1
+        if: github.event_name == 'push' && github.actor == 'loudply0-eng' && github.ref == 'refs/heads/feat/persistent-app-settings-20261126' && github.event.head_commit.message == 'Publish signed PS5 Windows Hub 0.1.1'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '0.1.1'
+          $manifestPath = 'release/v0.1.1/manifest.json'
+          $signaturePath = 'release/v0.1.1/manifest.sig.base64'
+          $assetPath = "dist/PS5-Windows-Hub-$version.zip"
+          $setupPath = "dist/PS5-Windows-Hub-Setup-$version.exe"
+          foreach ($path in @($manifestPath,$signaturePath,$assetPath,$setupPath)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required signed release file is missing: $path" }
+          }
+
+          $manifestBytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $manifestPath))
+          $manifest = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
+          $expectedUrl = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v$version/PS5-Windows-Hub-$version.zip"
+          if ($manifest.version -ne $version -or
+              $manifest.minimum_supported_version -ne '0.1.0' -or
+              $manifest.asset_name -ne "PS5-Windows-Hub-$version.zip" -or
+              $manifest.asset_url -ne $expectedUrl) {
+            throw 'Signed release manifest version, minimum version, asset name or URL is not the approved bootstrap release.'
+          }
+
+          $assetInfo = Get-Item -LiteralPath $assetPath
+          $actualHash = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ([int64]$manifest.size_bytes -ne [int64]$assetInfo.Length -or
+              $manifest.sha256 -cne $actualHash) {
+            throw "Signed manifest does not match the CI update package. size=$($assetInfo.Length) sha256=$actualHash"
+          }
+
+          $signature = [Convert]::FromBase64String(([System.IO.File]::ReadAllText($signaturePath)).Trim())
+          $publicKey = [Convert]::FromBase64String('MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEijzMLeIFygR8rMMlITN1rfCHTncbjih/+N4uWikQG4y2v+XPS8iuh5w+STGLKG0zBw8oiZw2GwH7cyh/sdRajg==')
+          $trustedFingerprint = '773d9d46e3f8904cacdf4b4bcf0ac415db529c2dc11d1b827cc3ca1edb2bca6d'
+          $actualFingerprint = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($publicKey)).ToLowerInvariant()
+          if ($actualFingerprint -cne $trustedFingerprint) { throw 'Embedded public-key fingerprint does not match the application trust anchor.' }
+
+          $verifier = [System.Security.Cryptography.ECDsa]::Create()
+          try {
+            $bytesRead = 0
+            $verifier.ImportSubjectPublicKeyInfo($publicKey,[ref]$bytesRead)
+            if ($bytesRead -ne $publicKey.Length) { throw 'Unexpected trailing data in the trusted public key.' }
+            $valid = $verifier.VerifyData(
+              $manifestBytes,
+              $signature,
+              [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+              [System.Security.Cryptography.DSASignatureFormat]::Rfc3279DerSequence
+            )
+            if (-not $valid) { throw 'ECDSA P-256 signature verification failed in the release runner.' }
+          } finally {
+            $verifier.Dispose()
+          }
+
+          $assets = @(
+            $assetPath,
+            $setupPath,
+            $manifestPath,
+            $signaturePath,
+            'dist/AnyPS5-v0.1.5-source.zip',
+            'dist/LICENSE-AnyPS5.txt',
+            'dist/KytyPS5-2026-11-26-61db2f8-source.zip',
+            'dist/LICENSE-KytyPS5.txt',
+            'dist/BUILD-INFO.txt',
+            'dist/SHA256SUMS.txt'
+          )
+          foreach ($path in $assets) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Release asset is missing: $path" }
+          }
+
+          $tag = "v$version"
+          & gh version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI is unavailable on this runner.' }
+          & gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            $uploadArgs = @('release','upload',$tag) + $assets + @('--repo',$env:GITHUB_REPOSITORY,'--clobber')
+            & gh @uploadArgs
+          } else {
+            $createArgs = @('release','create',$tag) + $assets + @(
+              '--repo',$env:GITHUB_REPOSITORY,
+              '--title',"PS5 Windows Hub $version",
+              '--target',$env:GITHUB_SHA,
+              '--notes',"الإصدار 0.1.1 هو إصدار التأسيس للتحديثات الموقعة تلقائياً. يتضمن تطبيق Windows وحزمة التحديث ومُثبّت Windows وملفات التحقق والتراخيص والمصادر المطابقة للمكونات المرفقة. تم التحقق من توقيع ECDSA P-256 ومن تطابق SHA-256 والحجم مع حزمة CI قبل النشر."
+            )
+            & gh @createArgs
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release creation or asset upload failed.' }
+          & gh release view $tag --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Published release could not be read back from GitHub.' }
+          Write-Host "Signed PS5 Windows Hub $version release assets were published and verified."
