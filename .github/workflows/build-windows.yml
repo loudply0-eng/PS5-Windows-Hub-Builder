@@ -511,6 +511,16 @@ jobs:
       actions: read
       contents: write
     steps:
+      - name: Disable line-ending conversion for signed metadata
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - name: Checkout exact signed metadata bytes
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Download exact CI artifact that was signed
         shell: pwsh
         env:
@@ -535,23 +545,12 @@ jobs:
           $assetName = "PS5-Windows-Hub-$version.zip"
           $assetPath = Join-Path $env:SIGNED_BUNDLE_ROOT $assetName
           $setupPath = Join-Path $env:SIGNED_BUNDLE_ROOT "PS5-Windows-Hub-Setup-$version.exe"
-          foreach ($path in @($assetPath,$setupPath)) {
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required original CI asset is missing: $path" }
+          foreach ($path in @($manifestPath,$signaturePath,$assetPath,$setupPath)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required signed release file is missing: $path" }
           }
 
-          $headers = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = 'application/vnd.github+json'
-            'X-GitHub-Api-Version' = '2022-11-28'
-          }
-          $apiRoot = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/contents"
-          $manifestResponse = Invoke-RestMethod -Uri "$apiRoot/$manifestPath?ref=$env:GITHUB_SHA" -Headers $headers
-          $signatureResponse = Invoke-RestMethod -Uri "$apiRoot/$signaturePath?ref=$env:GITHUB_SHA" -Headers $headers
-          $manifestBytes = [Convert]::FromBase64String(($manifestResponse.content -replace '\s',''))
-          $signatureFileBytes = [Convert]::FromBase64String(($signatureResponse.content -replace '\s',''))
-          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $manifestPath) | Out-Null
-          [System.IO.File]::WriteAllBytes($manifestPath,$manifestBytes)
-          [System.IO.File]::WriteAllBytes($signaturePath,$signatureFileBytes)
+          $manifestBytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $manifestPath))
+          $signatureFileBytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $signaturePath))
           $manifest = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
           $expectedUrl = "https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/releases/download/v$version/$assetName"
           if ($manifest.version -ne $version -or
