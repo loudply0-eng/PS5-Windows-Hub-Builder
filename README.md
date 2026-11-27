@@ -9,6 +9,7 @@ Windows build and packaging repository for **PS5 WINDOWS HUB**.
 - A self-contained .NET 8 WinForms desktop shell for Windows x64.
 - The upstream AnyPS5 v0.1.5 **relinker-only** executable, pinned to commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`.
 - A separate self-contained updater helper and an offline Windows release-signing GUI.
+- A versioned x64 Inno Setup installer, compiled with a pinned and Authenticode-verified Inno Setup compiler; CI installs it over a pre-existing test directory and verifies startup health, settings preservation and safe uninstall.
 - Matching AnyPS5 source and GPL-2.0-only license notices, plus SHA-256 checksums.
 
 The desktop shell now includes a **KytyPS5 launch tab**. The current preview still asks the user to select an engine folder, but this is only an intermediate development state. The required release experience is one PS5 Windows Hub installer containing a pinned KytyPS5 Windows runtime under `Engine/KytyPS5/`; users must not need to download or install Kyty separately. Bundled-runtime packaging and its corresponding-source delivery are not implemented or verified yet. Any distributed KytyPS5 runtime must comply with GPL-2.0-only, including notices and complete corresponding-source availability. The AnyPS5 relinker remains a separate experimental utility and is not a complete PS5 emulator.
@@ -27,7 +28,7 @@ The WinForms app currently has secure update checks enabled. It contains an ECDS
 
 The offline signer is packaged separately under `ReleaseSigner/`. It uses the encrypted private key locally, verifies that its public key matches the app's embedded trust anchor, and creates `manifest.json` plus `manifest.sig.base64`. The private key and passphrase must remain on the maintainer's own device; neither belongs in GitHub or in ChatGPT.
 
-**No official signed GitHub Release has been published yet.** CI success verifies the build and test harness, not the complete live update path. The first stable release must be signed locally and published with the exact versioned update ZIP, `manifest.json`, `manifest.sig.base64`, matching AnyPS5 source, and license. A real installed-client update test is still required.
+**No official signed GitHub Release has been published yet.** CI produces a tested Setup.exe and update ZIP, but the first live in-app update still requires signing the exact update ZIP and manifest offline with the matching private key, publishing `manifest.json` and `manifest.sig.base64`, and testing an installed-client upgrade. The first stable release must be signed locally and published with the exact versioned update ZIP, `manifest.json`, `manifest.sig.base64`, matching AnyPS5 source, and license. A real installed-client update test is still required.
 
 **Distribution status:** this Builder repository is public, and the app's metadata URLs point to its GitHub Releases. No signed release is published yet, so public clients cannot receive a real automatic update until the first signed release is created and tested. Keep the Core repository private and never expose private signing material.
 

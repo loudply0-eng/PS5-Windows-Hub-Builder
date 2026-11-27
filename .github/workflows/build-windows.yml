@@ -299,6 +299,98 @@ jobs:
             }
           } finally { $archive.Dispose() }
 
+      - name: Install pinned Inno Setup compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $download = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.1-x64.exe'
+          $installRoot = Join-Path $env:RUNNER_TEMP 'InnoSetup-7.1.1'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe' -OutFile $download
+          $signature = Get-AuthenticodeSignature -FilePath $download
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') {
+            throw "Inno Setup compiler signature verification failed: $($signature.Status) / $($signature.SignerCertificate.Subject)"
+          }
+          $process = Start-Process -FilePath $download -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$installRoot") -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed: $($process.ExitCode)" }
+          $compiler = Join-Path $installRoot 'ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Pinned Inno Setup compiler was not installed.' }
+          "INNO_SETUP_ISCC=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build and integration-test Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'app/PS5WindowsHub/PS5WindowsHub.csproj'
+          $version = $project.Project.PropertyGroup.Version
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
+          test -n "$version"
+          (cd dist && sha256sum BUILDER-COMMIT.txt BUILD-INFO.txt LICENSE-AnyPS5.txt relinker.exe "PS5-Windows-Hub-Setup-$version.exe" PS5-Windows-Hub/PS5-Windows-Hub.exe PS5-Windows-Hub/PS5WindowsHub.Updater.exe PS5-Windows-Hub/relinker.exe ReleaseSigner/PS5-Windows-Hub-Release-Signer.exe AnyPS5-v0.1.5-source.zip "PS5-Windows-Hub-$version.zip" > SHA256SUMS.txt)
+          (cd dist && sha256sum --check SHA256SUMS.txt)
+
+      - name: Upload Windows build artifact
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PS5-Windows-Hub-Preview
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+) { throw "Unexpected app version: $version" }
+          $setup = "dist/PS5-Windows-Hub-Setup-$version.exe"
+          & $env:INNO_SETUP_ISCC "/DAppVersion=$version" 'installer/PS5-Windows-Hub.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed: $LASTEXITCODE" }
+          if (-not (Test-Path $setup)) { throw "Installer output is missing: $setup" }
+
+          $installDir = Join-Path $env:RUNNER_TEMP 'PS5WindowsHub-Installer-Upgrade-Test'
+          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+          $legacyMarker = Join-Path $installDir 'legacy-user-file.keep'
+          [System.IO.File]::WriteAllText($legacyMarker, 'preserve existing user file')
+          $settingsPath = Join-Path $env:LOCALAPPDATA 'PS5WindowsHub/settings.json'
+          if (-not (Test-Path $settingsPath)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $settingsPath) | Out-Null
+            [System.IO.File]::WriteAllText($settingsPath, '{"SchemaVersion":1,"KytyDirectory":"C:\\Tools\\Kyty PS5","GameInput":"D:\\Games\\Sample Game","RelinkerInput":"D:\\Games\\eboot.bin","RelinkerOutput":"D:\\Output\\game_windows.exe"}')
+          }
+          $settingsBefore = [System.IO.File]::ReadAllText($settingsPath)
+
+          $installPsi = [System.Diagnostics.ProcessStartInfo]::new()
+          $installPsi.FileName = (Resolve-Path $setup).Path
+          $installPsi.UseShellExecute = $false
+          foreach ($arg in @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir")) { $installPsi.ArgumentList.Add($arg) }
+          $installProcess = [System.Diagnostics.Process]::Start($installPsi)
+          if (-not $installProcess.WaitForExit(180000)) { $installProcess.Kill(); throw 'Installer integration test timed out.' }
+          if ($installProcess.ExitCode -ne 0) { throw "Installer exited with code $($installProcess.ExitCode)." }
+
+          $healthPsi = [System.Diagnostics.ProcessStartInfo]::new()
+          $healthPsi.FileName = Join-Path $installDir 'PS5-Windows-Hub.exe'
+          $healthPsi.WorkingDirectory = $installDir
+          $healthPsi.UseShellExecute = $false
+          $healthPsi.ArgumentList.Add('--health-check')
+          $healthProcess = [System.Diagnostics.Process]::Start($healthPsi)
+          if (-not $healthProcess.WaitForExit(30000)) { $healthProcess.Kill(); throw 'Installed app health check timed out.' }
+          if ($healthProcess.ExitCode -ne 0) { throw "Installed app health check failed: $($healthProcess.ExitCode)" }
+          if (-not (Test-Path $legacyMarker) -or [System.IO.File]::ReadAllText($legacyMarker) -cne 'preserve existing user file') {
+            throw 'Installer did not preserve the pre-existing install-folder user file.'
+          }
+          if ([System.IO.File]::ReadAllText($settingsPath) -cne $settingsBefore) {
+            throw 'Installer changed application settings outside the install folder.'
+          }
+
+          $uninstaller = Join-Path $installDir 'unins000.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Installer did not register an uninstaller.' }
+          $uninstallPsi = [System.Diagnostics.ProcessStartInfo]::new()
+          $uninstallPsi.FileName = $uninstaller
+          $uninstallPsi.UseShellExecute = $false
+          foreach ($arg in @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART')) { $uninstallPsi.ArgumentList.Add($arg) }
+          $uninstallProcess = [System.Diagnostics.Process]::Start($uninstallPsi)
+          if (-not $uninstallProcess.WaitForExit(120000)) { $uninstallProcess.Kill(); throw 'Uninstaller integration test timed out.' }
+          if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstallProcess.ExitCode)." }
+          if (-not (Test-Path $legacyMarker)) { throw 'Uninstaller deleted an unrelated pre-existing user file.' }
+          Remove-Item -LiteralPath $installDir -Recurse -Force
+          Write-Host "Installer integration test passed for PS5 Windows Hub $version: install, startup health check, settings preservation, and safe uninstall."
+
       - name: Generate and verify SHA-256 checksums
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
