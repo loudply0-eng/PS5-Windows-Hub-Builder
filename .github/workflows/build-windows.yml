@@ -83,7 +83,7 @@ jobs:
       - name: Run relinker tests
         run: |
           set -euo pipefail
-          ctest --test-dir build-relinker -L relinker --output-on-failure
+          ctest --test-dir build-relinker -L relinker --output-on-failure --timeout 180
 
       - name: Build PS5 Windows Hub desktop application
         shell: pwsh
