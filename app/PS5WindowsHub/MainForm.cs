@@ -79,13 +79,27 @@ internal sealed class MainForm : Form
         log.BorderStyle = BorderStyle.FixedSingle;
         log.Font = new Font("Consolas", 9.5F);
         log.RightToLeft = RightToLeft.No;
-        log.Text = "PS5 WINDOWS HUB — KytyPS5 integration preview\r\n"
-            + "محرك KytyPS5 برنامج مستقل؛ نزّله من المصدر الرسمي وحدد مجلده أدناه.\r\n"
-            + "لا يتم تضمين المحرك أو ملفات الألعاب أو مفاتيح/برامج النظام ضمن هذه الحزمة.\r\n"
-            + "أداة AnyPS5 relinker في التبويب الآخر تجريبية ولا تمثل محاكي PS5 كاملاً.\r\n";
+        log.Text = "PS5 WINDOWS HUB — KytyPS5 integration\r\n"
+            + "محرك KytyPS5 الرسمي مضمّن داخل الحزمة ويُكتشف تلقائياً.\r\n"
+            + "يمكن اختيار مجلد محرك خارجي من زر الاستعراض؛ لا تتضمن الحزمة الألعاب أو ملفات نظام PS5.\r\n"
+            + "توافق تشغيل الألعاب يعتمد على إصدار المحرك واللعبة؛ أداة AnyPS5 relinker منفصلة وتجريبية.\r\n";
         root.Controls.Add(log, 0, 4);
         var savedSettings = HubSettingsStore.Load();
-        kytyDirectory.Text = savedSettings.KytyDirectory;
+        var savedEngineDirectory = savedSettings.KytyDirectory;
+        var savedEngineIsValid = false;
+        if (!string.IsNullOrWhiteSpace(savedEngineDirectory))
+        {
+            try
+            {
+                _ = KytyEngineLauncher.ResolveEmulatorPath(savedEngineDirectory);
+                savedEngineIsValid = true;
+            }
+            catch { }
+        }
+        var bundledEngineDirectory = KytyEngineLauncher.ResolveBundledEngineDirectory();
+        kytyDirectory.Text = savedEngineIsValid
+            ? savedEngineDirectory
+            : !string.IsNullOrWhiteSpace(bundledEngineDirectory) ? bundledEngineDirectory : savedEngineDirectory;
         gameInput.Text = savedSettings.GameInput;
         input.Text = savedSettings.RelinkerInput;
         output.Text = savedSettings.RelinkerOutput;
@@ -93,6 +107,7 @@ internal sealed class MainForm : Form
         gameInput.TextChanged += (_, _) => SaveSettings();
         input.TextChanged += (_, _) => SaveSettings();
         output.TextChanged += (_, _) => SaveSettings();
+        if (!string.Equals(savedEngineDirectory, kytyDirectory.Text, StringComparison.OrdinalIgnoreCase)) SaveSettings();
         SetStatus("جاهز — الإعدادات والمسارات تُحفظ محلياً تلقائياً.");
 
         Shown += async (_, _) =>
@@ -125,7 +140,7 @@ internal sealed class MainForm : Form
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         page.Controls.Add(panel);
 
-        panel.Controls.Add(PathRow("مجلد محرك KytyPS5 الرسمي (يحتوي kyty_emulator.exe)", kytyDirectory, browseKyty, ChooseKytyDirectory), 0, 0);
+        panel.Controls.Add(PathRow("مجلد محرك KytyPS5 (المجلد المرفق يُختار تلقائياً)", kytyDirectory, browseKyty, ChooseKytyDirectory), 0, 0);
         panel.Controls.Add(GamePathRow(), 0, 1);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 8, 0, 0), BackColor = BackColor };

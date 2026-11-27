@@ -41,7 +41,9 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 [Files]
 Source: "..\dist\PS5-Windows-Hub\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\LICENSE-AnyPS5.txt"; DestDir: "{app}\Licenses"; Flags: ignoreversion
+Source: "..\dist\LICENSE-KytyPS5.txt"; DestDir: "{app}\Licenses"; Flags: ignoreversion
 Source: "..\dist\AnyPS5-v0.1.5-source.zip"; DestDir: "{app}\Licenses\Source"; Flags: ignoreversion
+Source: "..\dist\KytyPS5-2026-11-26-61db2f8-source.zip"; DestDir: "{app}\Licenses\Source"; Flags: ignoreversion
 Source: "..\dist\BUILD-INFO.txt"; DestDir: "{app}\About"; Flags: ignoreversion
 
 [Icons]

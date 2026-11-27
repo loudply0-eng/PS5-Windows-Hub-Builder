@@ -4,17 +4,19 @@ Windows build and packaging repository for **PS5 WINDOWS HUB**.
 
 ## Current build
 
-`.github/workflows/build-windows.yml` builds:
+`.github/workflows/build-windows.yml` builds and packages:
 
 - A self-contained .NET 8 WinForms desktop shell for Windows x64.
+- The official, unmodified KytyPS5 Windows x64 runtime from release `KytyPS5-2026-11-26-61db2f8`, pinned to source commit `61db2f8874d4a94fd2908a87cefa973ddc48ef6e` and verified against the upstream Windows archive SHA-256.
+- The complete recursively checked-out KytyPS5 corresponding-source tree, including pinned submodules, plus its GPL-2.0-only license and notices.
 - The upstream AnyPS5 v0.1.5 **relinker-only** executable, pinned to commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`.
 - A separate self-contained updater helper and an offline Windows release-signing GUI.
-- A versioned x64 Inno Setup installer, compiled with a pinned and Authenticode-verified Inno Setup compiler; CI installs it over a pre-existing test directory and verifies startup health, settings preservation and safe uninstall.
+- A versioned x64 Inno Setup installer, compiled with a pinned and Authenticode-verified Inno Setup compiler; CI installs it over a pre-existing test directory and verifies startup health, bundled-engine presence, settings preservation and safe uninstall.
 - Matching AnyPS5 source and GPL-2.0-only license notices, plus SHA-256 checksums.
 
-The desktop shell now includes a **KytyPS5 launch tab**. The current preview still asks the user to select an engine folder, but this is only an intermediate development state. The required release experience is one PS5 Windows Hub installer containing a pinned KytyPS5 Windows runtime under `Engine/KytyPS5/`; users must not need to download or install Kyty separately. Bundled-runtime packaging and its corresponding-source delivery are not implemented or verified yet. Any distributed KytyPS5 runtime must comply with GPL-2.0-only, including notices and complete corresponding-source availability. The AnyPS5 relinker remains a separate experimental utility and is not a complete PS5 emulator.
+The installed Hub automatically detects the bundled KytyPS5 runtime at `Engine/KytyPS5/`. A user may still select a different engine directory manually. The AnyPS5 relinker remains a separate experimental utility; ELF relinking does not make a PS5 game playable on Windows.
 
-The workflow runs relinker tests, updater security tests (including Kyty path/input validation and argument-construction tests), offline signing-tool tests, and updater install/rollback integration tests. The Kyty tests do not start a real Kyty executable; an actual launch against a user-selected Windows installation remains a manual smoke test. The GitHub-hosted Windows PR run [45804637894](https://github.com/loudply0-eng/PS5-Windows-Hub-Builder/actions/runs/45804637894) completed successfully on commit `3b082f52c7717693ea5abec37b154e5aaedb9a09`. This verifies the listed CI build and test suite; it does not prove that a real signed release can update an installed user's PC or that a PS5 game is playable.
+The workflow runs relinker tests, updater security tests (including bundled-engine path resolution and Kyty game-input validation), offline signing-tool tests, and updater install/rollback integration tests. CI verifies the Hub installer and packaged engine files, but does not boot a real PS5 game. KytyPS5 is an actively developed emulator/translation layer with limited and changing game compatibility; a successful installer or process launch does not prove that a specific game is playable.
 
 ## Build runner and Actions cost
 
@@ -24,22 +26,22 @@ Build artifacts are uploaded for owner-triggered pushes to `feat/persistent-app-
 
 ## Secure updates — implementation present, public release pending
 
-The WinForms app currently has secure update checks enabled. It contains an ECDSA P-256 public trust anchor and checks signed release metadata after startup and every six hours. The update path verifies the signature, manifest, approved release asset URL, file size, and SHA-256 before staging the update through a separate helper. The helper has install health checks, backup, rollback, and user-data preservation logic.
+The WinForms app contains an ECDSA P-256 public trust anchor and checks signed release metadata after startup and every six hours. The update path verifies the signature, manifest, approved release asset URL, file size, and SHA-256 before staging the update through a separate helper. The helper has install health checks, backup, rollback, and user-data preservation logic.
 
 The offline signer is packaged separately under `ReleaseSigner/`. It uses the encrypted private key locally, verifies that its public key matches the app's embedded trust anchor, and creates `manifest.json` plus `manifest.sig.base64`. The private key and passphrase must remain on the maintainer's own device; neither belongs in GitHub or in ChatGPT.
 
-**No official signed GitHub Release has been published yet.** CI produces a tested Setup.exe and update ZIP, but the first live in-app update still requires signing the exact update ZIP and manifest offline with the matching private key, publishing `manifest.json` and `manifest.sig.base64`, and testing an installed-client upgrade. The first stable release must be signed locally and published with the exact versioned update ZIP, `manifest.json`, `manifest.sig.base64`, matching AnyPS5 source, and license. A real installed-client update test is still required.
+**No official signed GitHub Release has been published yet.** CI now produces a tested Setup.exe and an update ZIP containing the Hub, pinned KytyPS5 runtime and relinker. The first live in-app update still requires signing the exact update ZIP and manifest offline with the matching private key, publishing `manifest.json` and `manifest.sig.base64`, and testing an installed-client upgrade. A real installed-client update test is still required.
 
-**Distribution status:** this Builder repository is public, and the app's metadata URLs point to its GitHub Releases. No signed release is published yet, so public clients cannot receive a real automatic update until the first signed release is created and tested. Keep the Core repository private and never expose private signing material.
+**Distribution status:** this Builder repository is public, and the app's metadata URLs point to its GitHub Releases. No signed release is published yet, so installed clients cannot receive an automatic update until the first signed release is created and tested. Keep the Core repository private and never expose private signing material.
 
 The ECDSA update signature authenticates update metadata; it is **not** a Windows Authenticode publisher signature. Without an Authenticode certificate, Windows may still display an unknown-publisher/SmartScreen warning.
 
 ## Engine and licensing boundaries
 
-- **KytyPS5:** https://github.com/KytyPS5/KytyPS5 — GPL-2.0-only. The Hub launches a separately installed, unmodified upstream executable. Do not copy, link, patch, or redistribute KytyPS5 through the Hub without a separate GPL compliance review and the exact corresponding source/notices.
+- **KytyPS5:** https://github.com/KytyPS5/KytyPS5 — GPL-2.0-only. This build redistributes the unmodified Windows x64 binary from upstream release `KytyPS5-2026-11-26-61db2f8`. The installer includes the matching recursively checked-out source tree at commit `61db2f8874d4a94fd2908a87cefa973ddc48ef6e`, its pinned submodules, `LICENSE`, and `LICENSES` notices. The emulator is early-stage; compatibility varies by title and release.
 - **AnyPS5:** https://github.com/boykopovar/AnyPS5 — v0.1.5 at commit `62bd7dd61e2b8a7a59262c4c145edff549bae5b9`, GPL-2.0-only. This is a relinker-only utility, not a complete PS5 runtime. Its matching source and license are packaged with the build.
 
-A successful relink or successful process launch does not prove a game is playable. Compatibility must be tested per title and per engine build.
+The Hub does not distribute game files, PS5 firmware, console keys, or decryption keys. Use only game content and system software you are legally entitled to use.
 
 ## Security
 
