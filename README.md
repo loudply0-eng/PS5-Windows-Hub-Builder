@@ -19,7 +19,7 @@ The workflow runs relinker tests, updater security tests (including Kyty path/in
 
 The Windows workflow uses GitHub-hosted `windows-latest` runners. GitHub-hosted Actions usage is subject to the account's included minutes and billing limits.
 
-Build artifacts are uploaded only for a manual owner-triggered workflow run and retained for one day. Use the **Actions** tab to start a manual build when a fresh artifact is needed.
+Build artifacts are uploaded for owner-triggered pushes to `feat/persistent-app-settings-20261126` and manual owner-triggered workflow runs, retained for seven days, and named as CI previews. They are not signed public Releases; signing and an installed-client update test remain separate release gates.
 
 ## Secure updates — implementation present, public release pending
 

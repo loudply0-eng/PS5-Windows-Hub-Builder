@@ -1,6 +1,8 @@
 name: Build PS5 Windows Hub CI (AnyPS5 relinker preview)
 
 on:
+  push:
+    branches: [feat/persistent-app-settings-20261126]
   workflow_dispatch:
   pull_request:
     branches: [main, feat/signed-auto-updater-20261124, ci/github-hosted-windows-20261126]
@@ -14,7 +16,7 @@ concurrency:
 
 jobs:
   build-windows:
-    if: github.actor == 'loudply0-eng' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.actor == 'loudply0-eng' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -247,7 +249,7 @@ jobs:
           Write-Host 'Updater transaction tests passed: successful swap, rollback, external user-data sentinel, and exact application settings preservation.'
 
       - name: Prepare binaries, corresponding source and checksums
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
           set -euo pipefail
           test -f build-relinker/core/relinker/relinker.exe
@@ -279,7 +281,7 @@ jobs:
             > dist/BUILD-INFO.txt
 
       - name: Create versioned update payload ZIP
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -298,7 +300,7 @@ jobs:
           } finally { $archive.Dispose() }
 
       - name: Generate and verify SHA-256 checksums
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.actor == 'loudply0-eng')
         run: |
           set -euo pipefail
           version="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' app/PS5WindowsHub/PS5WindowsHub.csproj | head -n1)"
@@ -307,10 +309,10 @@ jobs:
           (cd dist && sha256sum --check SHA256SUMS.txt)
 
       - name: Upload Windows build artifact
-        if: github.event_name == 'workflow_dispatch' && github.actor == 'loudply0-eng'
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'loudply0-eng'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: PS5-Windows-Hub-Preview
           path: dist/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
